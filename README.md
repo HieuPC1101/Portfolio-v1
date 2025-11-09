@@ -1,35 +1,39 @@
-# DanhMucDauTu
+# Portfolio-v1
 
-Ứng dụng hỗ trợ tối ưu hóa danh mục đầu tư chứng khoán Việt Nam, xây dựng trên nền tảng Streamlit.
+Ứng dụng tối ưu hóa danh mục đầu tư chứng khoán Việt Nam sử dụng Streamlit.
+
+## Giới thiệu
+Portfolio-v1 là một hệ thống hỗ trợ nhà đầu tư phân tích, tối ưu hóa và quản lý danh mục đầu tư chứng khoán. Ứng dụng tích hợp các mô hình toán học, phân tích kỹ thuật, và giao diện trực quan để giúp người dùng ra quyết định đầu tư hiệu quả.
 
 ## Tính năng chính
+- **Thu thập dữ liệu**: Tự động lấy thông tin công ty, ngành, giá cổ phiếu từ các nguồn dữ liệu Việt Nam.
+- **Phân tích thị trường & ngành**: Hiển thị tổng quan thị trường, heatmap, drill-down theo ngành/sàn.
+- **Tối ưu hóa danh mục**: Hỗ trợ các mô hình Markowitz, Max Sharpe, Min Volatility, Min CVaR, Min CDaR, HRP.
+- **Phân tích kỹ thuật**: Tính toán các chỉ báo như SMA, EMA, RSI, MACD, Bollinger Bands.
+- **Backtesting**: Kiểm tra hiệu quả danh mục đầu tư qua các giai đoạn lịch sử.
+- **Quản lý phiên làm việc**: Lưu trữ trạng thái, bộ lọc, danh sách cổ phiếu đã chọn.
+- **Giao diện trực quan**: Streamlit + Plotly, dễ sử dụng, thao tác nhanh.
 
-- **Tối ưu hóa danh mục đầu tư**: Sử dụng các mô hình Markowitz, Max Sharpe, Min Volatility, Min CVaR, Min CDaR, HRP.
-- **Phân tích thị trường & ngành**: Tổng quan thị trường, hiệu suất ngành, lọc cổ phiếu theo nhiều tiêu chí.
-- **Dự báo giá cổ phiếu**: Áp dụng các mô hình chuỗi thời gian (ARIMA, SARIMAX, Holt-Winters).
-- **Phân tích kỹ thuật**: Tính toán và hiển thị các chỉ báo như SMA, EMA, RSI, MACD, Bollinger Bands.
-- **Giao diện trực quan**: Streamlit dashboard, bộ lọc, hiển thị danh sách cổ phiếu, thao tác thêm/xóa linh hoạt.
-- **Quản lý dữ liệu**: Đọc dữ liệu từ file CSV, lấy dữ liệu giá cổ phiếu từ API, cache thông tin.
+## Cài đặt
+1. Clone dự án:
+	```powershell
+	git clone https://github.com/HieuPC1101/Portfolio-v1.git
+	```
+2. Cài đặt các thư viện Python:
+	```powershell
+	pip install -r requirements.txt
+	```
+3. Chạy ứng dụng:
+	```powershell
+	streamlit run scripts/dashboard.py
 
-## Công nghệ sử dụng
+## Yêu cầu hệ thống
+- Python >= 3.8
+- Kết nối Internet để lấy dữ liệu từ API
 
-- Python, Streamlit, Pandas, Plotly, Numpy, vnstock, pypfopt, scipy, pandas-ta, statsmodels
+## Tài liệu & Hướng dẫn sử dụng
+1. Chạy ứng dụng và truy cập giao diện web Streamlit.
+2. Chọn các tham số phân tích, danh mục cổ phiếu, mô hình tối ưu hóa.
+3. Xem kết quả phân tích, biểu đồ, backtest và xuất danh mục đầu tư.
 
-## Cấu trúc thư mục
-
-- `scripts/`: Chứa các module chức năng (dashboard, data_loader, portfolio_models, forecasting_models, market_overview, visualization, ui_components, config)
-- `data/`: Dữ liệu đầu vào (company_info.csv)
-- `config/`: Cấu hình bổ sung
-
-## Cách sử dụng
-
-1. Cài đặt các package cần thiết:
-   ```
-   pip install -r requirements.txt
-   ```
-2. Chạy ứng dụng:
-   ```
-   streamlit run scripts/dashboard.py
-   ```
-3. Tùy chỉnh các tham số phân tích trong `scripts/config.py` nếu cần.
 
