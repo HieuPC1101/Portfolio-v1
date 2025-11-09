@@ -3,7 +3,7 @@ pandas
 plotly
 numpy
 vnstock
-pypfopt
+PyPortfolioOpt
 scipy
 pandas-ta
 statsmodels
