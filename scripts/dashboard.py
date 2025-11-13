@@ -65,8 +65,8 @@ from scripts.session_manager import (
     get_current_tab
 )
 from scripts.chatbot_ui import (
-    render_chatbot_sidebar,
-    get_current_portfolio_context
+    render_chatbot_page,
+    render_chat_controls
 )
 import scripts.data_loader as data_loader_module
 
@@ -396,18 +396,24 @@ st.sidebar.title("Lựa chọn phương thức")
 default_option = get_current_tab()
 option = st.sidebar.radio(
     "Chọn phương thức", 
-    ["Tổng quan Thị trường & Ngành", "Tự chọn mã cổ phiếu", "Hệ thống đề xuất mã cổ phiếu tự động"],
-    index=["Tổng quan Thị trường & Ngành", "Tự chọn mã cổ phiếu", "Hệ thống đề xuất mã cổ phiếu tự động"].index(default_option) if default_option in ["Tổng quan Thị trường & Ngành", "Tự chọn mã cổ phiếu", "Hệ thống đề xuất mã cổ phiếu tự động"] else 0
+    ["Tổng quan Thị trường & Ngành", "Tự chọn mã cổ phiếu", "Hệ thống đề xuất mã cổ phiếu tự động", "Trợ lý AI"],
+    index=["Tổng quan Thị trường & Ngành", "Tự chọn mã cổ phiếu", "Hệ thống đề xuất mã cổ phiếu tự động", "Trợ lý AI"].index(default_option) if default_option in ["Tổng quan Thị trường & Ngành", "Tự chọn mã cổ phiếu", "Hệ thống đề xuất mã cổ phiếu tự động", "Trợ lý AI"] else 0
 )
 
 # Cập nhật tab hiện tại vào session state
 update_current_tab(option)
 
-# Thêm chatbot vào sidebar
-portfolio_context = get_current_portfolio_context()
-render_chatbot_sidebar(portfolio_context)
+if option == "Trợ lý AI":
+    # Hiển thị trang chatbot
+    render_chatbot_page()
 
-if option == "Tổng quan Thị trường & Ngành":
+    # Thêm 2 nút vào sidebar dưới chức năng Trợ lý AI khi chatbot đã sẵn sàng
+    if st.session_state.get("chatbot") is not None:
+        st.sidebar.markdown("#### Tiện ích Trợ lý AI")
+        controls_container = st.sidebar.container()
+        render_chat_controls(controls_container, key_prefix="main_sidebar")
+
+elif option == "Tổng quan Thị trường & Ngành":
     # Hiển thị trang tổng quan ngành
     show_sector_overview_page(df, data_loader_module)
 

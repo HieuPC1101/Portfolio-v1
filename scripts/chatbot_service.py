@@ -21,8 +21,32 @@ class PortfolioChatbot:
         """
         self.api_key = api_key
         genai.configure(api_key=api_key)
-        # Sử dụng Gemini 2.5 Flash - model ổn định và nhanh nhất
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Cấu hình safety settings
+        self.safety_settings = [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_NONE"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH",
+                "threshold": "BLOCK_NONE"
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_NONE"
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_NONE"
+            }
+        ]
+        
+        # Sử dụng Gemini Flash Latest với safety settings
+        self.model = genai.GenerativeModel(
+            'gemini-flash-latest',
+            safety_settings=self.safety_settings
+        )
         self.conversation_history = []
         
     def get_system_prompt(self, portfolio_data=None):
@@ -35,18 +59,24 @@ class PortfolioChatbot:
         Returns:
             str: System prompt
         """
-        base_prompt = """Bạn là một trợ lý AI chuyên về đầu tư chứng khoán Việt Nam. 
-Nhiệm vụ của bạn là:
-- Tư vấn về các chiến lược đầu tư và tối ưu hóa danh mục
-- Giải thích các chỉ số tài chính như Sharpe Ratio, CVaR, CDaR, Volatility
-- Phân tích rủi ro và lợi nhuận của danh mục
-- Giúp người dùng hiểu rõ hơn về các mô hình tối ưu hóa (Markowitz, HRP, Max Sharpe, Min Volatility, Min CVaR, Min CDaR)
-- Trả lời các câu hỏi về thị trường chứng khoán Việt Nam
-
-Hãy trả lời ngắn gọn, dễ hiểu và thân thiện. Sử dụng tiếng Việt."""
+        base_prompt = (
+    "Bạn là một trợ lý AI chuyên về tư vấn đầu tư chứng khoán tại thị trường Việt Nam.\n\n"
+    "**Nhiệm vụ chính:**\n"
+    "- Tư vấn chiến lược đầu tư (ngắn hạn, trung hạn, dài hạn).\n"
+    "- Giải thích các chỉ số tài chính và phương pháp định giá doanh nghiệp.\n"
+    "- Phân tích các rủi ro (thị trường, ngành, cổ phiếu cụ thể).\n"
+    "- Tối ưu hóa danh mục đầu tư dựa trên các tiêu chí người dùng cung cấp như khẩu vị rủi ro, mục tiêu lợi nhuận, và thời gian đầu tư.\n\n"
+    "**Nguyên tắc hoạt động:**\n"
+    "1.  **Dựa trên dữ liệu:** Luôn phân tích dựa trên dữ liệu thực tế, cập nhật. Ưu tiên sử dụng thông tin từ báo cáo tài chính của công ty, dữ liệu giao dịch và các nguồn tin tài chính uy tín tại Việt Nam.\n"
+    "2.  **Cụ thể và rõ ràng:** Đưa ra lời khuyên cụ thể, có luận điểm. Giải thích các thuật ngữ và phương pháp phân tích một cách đơn giản, dễ hiểu.\n"
+    "3.  **Cá nhân hóa:** Nếu người dùng cung cấp thông tin về danh mục đầu tư hiện tại, hãy sử dụng thông tin đó làm cơ sở để đưa ra các đề xuất tối ưu và phù hợp nhất.\n\n"
+    "**Định dạng trả lời:**\n"
+    "- Sử dụng tiếng Việt, văn phong ngắn gọn, đi thẳng vào vấn đề, không bỏ sót câu trả lời.\n"
+    "- Ưu tiên các giải pháp và hành động mang tính thực tiễn.\n\n"
+)
 
         if portfolio_data:
-            base_prompt += f"\n\nThông tin danh mục hiện tại:\n{portfolio_data}"
+            base_prompt += f"\n\nThông tin danh mục:\n{portfolio_data}"
             
         return base_prompt
     
@@ -91,6 +121,9 @@ Hãy trả lời ngắn gọn, dễ hiểu và thân thiện. Sử dụng tiến
                 role_label = "Người dùng" if msg["role"] == "user" else "Trợ lý"
                 full_prompt += f"{role_label}: {msg['content']}\n\n"
             
+            # Debug: In ra để kiểm tra
+            print(f"[DEBUG] Sending prompt to Gemini API...")
+            
             # Gọi Google Gemini API
             response = self.model.generate_content(
                 full_prompt,
@@ -98,19 +131,39 @@ Hãy trả lời ngắn gọn, dễ hiểu và thân thiện. Sử dụng tiến
                     'temperature': 0.7,
                     'top_p': 0.95,
                     'top_k': 40,
-                    'max_output_tokens': 1024,
+                    'max_output_tokens': 2048,
                 }
             )
             
-            # Kiểm tra response có hợp lệ không
-            if not response or not response.parts:
-                return "Xin lỗi, tôi không thể tạo câu trả lời lúc này. Vui lòng thử lại."
+            print(f"[DEBUG] Received response from Gemini API")
             
             # Kiểm tra response có bị block không
-            if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
-                return f"Câu hỏi bị chặn do: {response.prompt_feedback.block_reason}"
+            if hasattr(response, 'prompt_feedback') and hasattr(response.prompt_feedback, 'block_reason'):
+                if response.prompt_feedback.block_reason:
+                    error_msg = f"Câu hỏi bị chặn do: {response.prompt_feedback.block_reason}. Vui lòng thử câu hỏi khác."
+                    print(f"[DEBUG] Blocked: {error_msg}")
+                    return error_msg
             
-            assistant_message = response.text
+            # Kiểm tra response có parts không
+            if not response or not hasattr(response, 'parts') or not response.parts:
+                error_msg = "Xin lỗi, tôi không nhận được phản hồi từ AI. Vui lòng thử lại."
+                print(f"[DEBUG] No parts in response")
+                return error_msg
+            
+            # Lấy text từ response
+            try:
+                assistant_message = response.text
+                print(f"[DEBUG] Got response text: {len(assistant_message)} chars")
+            except Exception as text_error:
+                error_msg = f"Xin lỗi, không thể đọc phản hồi: {str(text_error)}. Vui lòng thử lại."
+                print(f"[DEBUG] Error getting text: {text_error}")
+                return error_msg
+            
+            # Kiểm tra message có nội dung không
+            if not assistant_message or assistant_message.strip() == "":
+                error_msg = "Xin lỗi, câu trả lời trống. Vui lòng thử câu hỏi khác."
+                print(f"[DEBUG] Empty response")
+                return error_msg
             
             # Thêm response vào lịch sử
             self.add_message_to_history("assistant", assistant_message)
@@ -174,5 +227,6 @@ def create_quick_question_buttons():
         "Giải thích mô hình Markowitz",
         "Làm sao để giảm rủi ro danh mục?",
         "Nên đa dạng hóa bao nhiêu cổ phiếu?",
+        "Các chỉ số tài chính quan trọng là gì?",
     ]
     return quick_questions
