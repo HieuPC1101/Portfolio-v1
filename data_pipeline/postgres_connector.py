@@ -198,8 +198,6 @@ def create_database_schema(connection: psycopg2.extensions.connection) -> None:
             vn30_change DECIMAL(10, 4),       -- % thay đổi VN30
             hnx_index DECIMAL(15, 2),         -- Chỉ số HNX-Index
             hnx_index_change DECIMAL(10, 4),  -- % thay đổi HNX-Index
-            upcom_index DECIMAL(15, 2),       -- Chỉ số UPCOM-Index
-            upcom_index_change DECIMAL(10, 4),-- % thay đổi UPCOM-Index
             -- Thống kê giao dịch
             total_volume BIGINT,              -- Tổng khối lượng giao dịch
             total_value DECIMAL(20, 2),       -- Tổng giá trị giao dịch

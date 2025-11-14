@@ -363,7 +363,7 @@ def fetch_market_indices(
     end_date: str = None
 ) -> pd.DataFrame:
     """
-    Lấy dữ liệu các chỉ số thị trường (VN-Index, VN30, HNX-Index, UPCOM-Index)
+    Lấy dữ liệu các chỉ số thị trường (VN-Index, VN30, HNX-Index)
     
     Args:
         start_date: Ngày bắt đầu (định dạng 'YYYY-MM-DD')
@@ -384,8 +384,8 @@ def fetch_market_indices(
     indices = {
         'VNINDEX': 'vnindex',
         'VN30': 'vn30',
-        'HNX': 'hnx_index',
-        'UPCOM': 'upcom_index'
+        'HNX30': 'hnx30',
+        'HNXINDEX': 'hnx_index'
     }
     
     market_data = None
