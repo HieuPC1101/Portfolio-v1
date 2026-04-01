@@ -1,0 +1,16 @@
+streamlit
+pandas
+plotly
+numpy
+scipy
+statsmodels
+PyPortfolioOpt
+vnstock
+vnai
+google-generativeai
+feedparser
+requests
+beautifulsoup4
+schedule
+pytz
+pandas-ta
