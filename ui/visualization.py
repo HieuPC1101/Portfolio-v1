@@ -639,7 +639,7 @@ def plot_candlestick_chart(ohlc_data, ticker):
     st.plotly_chart(fig, width='stretch')
     
     # Thêm hướng dẫn sử dụng
-    with st.expander("ℹ️ Hướng dẫn đọc chỉ báo kỹ thuật"):
+    with st.expander(" Hướng dẫn đọc chỉ báo kỹ thuật"):
         st.markdown("""
         **Các chỉ báo được hiển thị:**
         
@@ -1745,7 +1745,7 @@ def plot_hrp_dendrogram(data, weights):
         - Các nhóm tài sản có tương quan cao sẽ được phân bổ ít vốn hơn  
         - Các nhóm độc lập được phân bổ nhiều vốn hơn để đa dạng hóa  
 
-        **💡 Ví dụ:**  
+        ** Ví dụ:**  
         Nếu 3 mã cổ phiếu ngân hàng nằm trên cùng một nhánh thấp, điều này có nghĩa chúng biến động rất giống nhau.  
         Thay vì đầu tư 30% vào mỗi mã cổ phiếu, mô hình HRP sẽ phân bổ tổng cộng 30% cho cả nhóm và tăng phân bổ cho các mã cổ phiếu ở nhóm khác.
         """)
@@ -1797,10 +1797,10 @@ def plot_hrp_dendrogram(data, weights):
         st.write("**Các cặp cổ phiếu có tương quan cao (> 0.5):**")
         df_corr = pd.DataFrame(high_corr_pairs)
         st.dataframe(df_corr, width='stretch')
-        st.info("⚠️ Các cặp cổ phiếu này có xu hướng biến động cùng chiều. "
+        st.info(" Các cặp cổ phiếu này có xu hướng biến động cùng chiều. "
                 "Đầu tư vào nhiều cổ phiếu trong cùng nhóm có thể không mang lại hiệu quả đa dạng hóa.")
     else:
-        st.success("✅ Không có cặp cổ phiếu nào có tương quan cao. Danh mục được đa dạng hóa tốt!")
+        st.success(" Không có cặp cổ phiếu nào có tương quan cao. Danh mục được đa dạng hóa tốt!")
     
     # Giải thích mô hình HRP
     with st.expander("Giải thích về Mô hình HRP (Hierarchical Risk Parity)"):
@@ -1828,23 +1828,23 @@ def plot_hrp_dendrogram(data, weights):
         - Tiếp tục chia nhỏ cho đến từng tài sản
         
         **3. Ưu điểm:**
-        - ✅ Ổn định hơn các mô hình tối ưu hóa truyền thống
-        - ✅ Không cần ước lượng lợi nhuận kỳ vọng (khó dự đoán chính xác)
-        - ✅ Xử lý tốt khi các tài sản có tương quan cao
-        - ✅ Giảm thiểu "đặt tất cả trứng vào một giỏ"
-        - ✅ Dễ hiểu và giải thích cho nhà đầu tư
+        -  Ổn định hơn các mô hình tối ưu hóa truyền thống
+        -  Không cần ước lượng lợi nhuận kỳ vọng (khó dự đoán chính xác)
+        -  Xử lý tốt khi các tài sản có tương quan cao
+        -  Giảm thiểu "đặt tất cả trứng vào một giỏ"
+        -  Dễ hiểu và giải thích cho nhà đầu tư
         
         **4. Nhược điểm:**
-        - ⚠️ Không tối đa hóa lợi nhuận như Max Sharpe
-        - ⚠️ Không tối thiểu hóa rủi ro tuyệt đối như Min Volatility
-        - ⚠️ Phụ thuộc vào phương pháp clustering (single, complete, average)
-        - ⚠️ Hiệu quả phụ thuộc vào chất lượng dữ liệu lịch sử
+        -  Không tối đa hóa lợi nhuận như Max Sharpe
+        -  Không tối thiểu hóa rủi ro tuyệt đối như Min Volatility
+        -  Phụ thuộc vào phương pháp clustering (single, complete, average)
+        -  Hiệu quả phụ thuộc vào chất lượng dữ liệu lịch sử
         
         **5. Khi nào nên sử dụng HRP:**
-        - 📌 Khi danh mục có nhiều tài sản với tương quan phức tạp
-        - 📌 Muốn một giải pháp ổn định, không nhạy cảm với nhiễu dữ liệu
-        - 📌 Ưu tiên đa dạng hóa thay vì tối đa hóa lợi nhuận
-        - 📌 Không tự tin vào dự báo lợi nhuận tương lai
+        -  Khi danh mục có nhiều tài sản với tương quan phức tạp
+        -  Muốn một giải pháp ổn định, không nhạy cảm với nhiễu dữ liệu
+        -  Ưu tiên đa dạng hóa thay vì tối đa hóa lợi nhuận
+        -  Không tự tin vào dự báo lợi nhuận tương lai
         
         **6. So sánh với các mô hình khác:**
         

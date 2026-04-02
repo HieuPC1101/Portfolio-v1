@@ -135,17 +135,17 @@ def fetch_stock_data2(symbols: List[str], start_date: str, end_date: str,
             if df_res is not None and not df_res.empty:
                 results.append(df_res)
                 if verbose:
-                    print(f"\r[{i}/{len(unique_symbols)}] {ticker}: ✓ Thành công", end="")
+                    print(f"\r[{i}/{len(unique_symbols)}] {ticker}:  Thành công", end="")
             else:
                 skipped_tickers.append(tk_name)
                 if verbose:
-                    print(f"\r[{i}/{len(unique_symbols)}] {ticker}: ✗ Bỏ qua ({err})", end="")
+                    print(f"\r[{i}/{len(unique_symbols)}] {ticker}:  Bỏ qua ({err})", end="")
 
     print("") # Xuống dòng sau khi chạy xong loop
 
     if not results:
         if verbose:
-            print("✗ Không thể tải dữ liệu cho bất kỳ cổ phiếu nào.")
+            print(" Không thể tải dữ liệu cho bất kỳ cổ phiếu nào.")
         return pd.DataFrame(), skipped_tickers
 
     # OPTIMIZATION: Dùng concat axis=1 thay vì merge loop
@@ -161,7 +161,7 @@ def fetch_stock_data2(symbols: List[str], start_date: str, end_date: str,
         final_data = final_data.interpolate(method='linear', limit_direction='both')
         
         if verbose:
-            print(f"✓ Hoàn thành! Tải thành công {len(final_data.columns)}/{len(unique_symbols)} cổ phiếu")
+            print(f" Hoàn thành! Tải thành công {len(final_data.columns)}/{len(unique_symbols)} cổ phiếu")
         
         return final_data, skipped_tickers
 
@@ -223,7 +223,7 @@ def get_latest_prices(tickers: List[str]) -> Dict[str, float]:
                 latest_prices[sym] = price
             # Có thể print log lỗi nếu cần thiết nhưng để gọn output ta bỏ qua
 
-    print(f"✓ Hoàn thành! Lấy giá thành công cho {len(latest_prices)}/{len(unique_tickers)} cổ phiếu")
+    print(f" Hoàn thành! Lấy giá thành công cho {len(latest_prices)}/{len(unique_tickers)} cổ phiếu")
     return latest_prices
 
 
@@ -328,7 +328,7 @@ def _get_sector_snapshot_cached(exchange: str, size: int, source: str) -> pd.Dat
         listing_df = stock.listing.symbols_by_exchange()
         
         if listing_df is None or listing_df.empty:
-            print("✗ Listing API returned empty.")
+            print(" Listing API returned empty.")
             return pd.DataFrame()
 
         # Relaxed logic: Do not strictly filter by 'type'='STO' because API might return varied values.

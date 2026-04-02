@@ -44,16 +44,16 @@ def fetch_fundamental_data_batch(symbols: List[str]) -> pd.DataFrame:
         data = fetch_fundamental_data(symbol)
         if data:
             fundamental_list.append(data)
-            print("✓ Thành công")
+            print(" Thành công")
         else:
-            print("✗ Không có dữ liệu")
+            print(" Không có dữ liệu")
 
     if fundamental_list:
         df = pd.DataFrame(fundamental_list)
-        print(f"\n✓ Hoàn thành! Lấy dữ liệu thành công cho {len(df)}/{len(symbols)} mã cổ phiếu")
+        print(f"\n Hoàn thành! Lấy dữ liệu thành công cho {len(df)}/{len(symbols)} mã cổ phiếu")
         return df
 
-    print(f"\n✗ Không thể lấy dữ liệu phân tích cơ bản cho bất kỳ mã cổ phiếu nào")
+    print(f"\n Không thể lấy dữ liệu phân tích cơ bản cho bất kỳ mã cổ phiếu nào")
     return pd.DataFrame()
 
 

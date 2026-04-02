@@ -206,17 +206,17 @@ def _test_normalize_metric():
     # Test 1: Normal case
     score = normalize_metric(15.0, 10.0, 20.0, reverse=False)
     assert 40 < score < 60, f"Expected ~50, got {score}"
-    print(f"✓ Test 1 passed: {score:.2f}")
+    print(f" Test 1 passed: {score:.2f}")
     
     # Test 2: Reverse (risk metric)
     score = normalize_metric(8.0, 5.0, 15.0, reverse=True)
     assert score > 60, f"Expected >60 (low risk = high score), got {score}"
-    print(f"✓ Test 2 passed: {score:.2f}")
+    print(f" Test 2 passed: {score:.2f}")
     
     # Test 3: Edge case - all same
     score = normalize_metric(10.0, 10.0, 10.0)
     assert score == 50.0, f"Expected 50, got {score}"
-    print(f"✓ Test 3 passed: {score:.2f}")
+    print(f" Test 3 passed: {score:.2f}")
     
     print("All normalize_metric tests passed!\n")
 
@@ -232,7 +232,7 @@ def _test_validate_result():
         'Rủi ro (Độ lệch chuẩn)': 0.08
     }
     assert validate_result(valid_result), "Valid result should pass"
-    print("✓ Test 1 passed: Valid result")
+    print(" Test 1 passed: Valid result")
     
     # Test 2: Missing key
     invalid_result = {
@@ -241,7 +241,7 @@ def _test_validate_result():
         # Missing volatility
     }
     assert not validate_result(invalid_result), "Invalid result should fail"
-    print("✓ Test 2 passed: Missing key detected")
+    print(" Test 2 passed: Missing key detected")
     
     # Test 3: Empty weights
     invalid_result = {
@@ -250,7 +250,7 @@ def _test_validate_result():
         'Rủi ro (Độ lệch chuẩn)': 0.08
     }
     assert not validate_result(invalid_result), "Empty weights should fail"
-    print("✓ Test 3 passed: Empty weights detected")
+    print(" Test 3 passed: Empty weights detected")
     
     print("All validate_result tests passed!\n")
 
@@ -263,22 +263,22 @@ def _test_calculate_max_drawdown():
     returns = pd.Series([0.01, -0.02, 0.03, -0.05, 0.02])
     mdd = calculate_max_drawdown_safe(returns_data=returns)
     assert mdd is not None and mdd < 0, f"MDD should be negative, got {mdd}"
-    print(f"✓ Test 1 passed: MDD from returns = {mdd:.2f}%")
+    print(f" Test 1 passed: MDD from returns = {mdd:.2f}%")
     
     # Test 2: From CDaR
     mdd = calculate_max_drawdown_safe(cdar=-0.15)
     assert mdd == -15.0, f"Expected -15.0, got {mdd}"
-    print(f"✓ Test 2 passed: MDD from CDaR = {mdd:.2f}%")
+    print(f" Test 2 passed: MDD from CDaR = {mdd:.2f}%")
     
     # Test 3: From volatility
     mdd = calculate_max_drawdown_safe(volatility=8.0)
     assert mdd == -20.0, f"Expected -20.0 (8*2.5), got {mdd}"
-    print(f"✓ Test 3 passed: MDD from volatility = {mdd:.2f}%")
+    print(f" Test 3 passed: MDD from volatility = {mdd:.2f}%")
     
     # Test 4: No data
     mdd = calculate_max_drawdown_safe()
     assert mdd is None, f"Expected None, got {mdd}"
-    print("✓ Test 4 passed: No data returns None")
+    print(" Test 4 passed: No data returns None")
     
     print("All calculate_max_drawdown_safe tests passed!\n")
 
@@ -294,5 +294,5 @@ if __name__ == "__main__":
     _test_calculate_max_drawdown()
     
     print("=" * 60)
-    print("✅ All tests passed successfully!")
+    print(" All tests passed successfully!")
     print("=" * 60)

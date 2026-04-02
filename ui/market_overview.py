@@ -11,22 +11,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 import warnings
 
-from data_process.data_loader import (
-    get_market_indices_metrics,
-    get_sector_snapshot,
-    summarize_sector_performance,
-    summarize_market_cap_distribution,
-    get_foreign_flow_leaderboard,
-    get_liquidity_leaders,
-    get_indices_history,
-    get_index_history,
-    get_realtime_index_board,
-    fetch_stock_data2,
-    get_return_correlation_matrix,
-    fetch_data_from_csv
-)
+from backend.services.market_overview_service import get_market_overview_service
 from plotly.subplots import make_subplots
-from ui.visualization import plot_interactive_stock_chart
 from utils.config import ANALYSIS_START_DATE, ANALYSIS_END_DATE
 
 warnings.filterwarnings('ignore')
@@ -52,17 +38,8 @@ LEGEND_GRAY_LIGHT = '#cbd5d5'
 TITLE_FONT = dict(size=15, color=FONT_COLOR, family=BOLD_FONT_FAMILY)
 TITLE_PAD = dict(b=12)
 
-SNAPSHOT_COLUMNS = [
-    'ticker',
-    'industry',
-    'market_cap',
-    'price_growth_1w',
-    'price_growth_1m',
-    'avg_trading_value_20d',
-    'foreign_buysell_20s'
-]
-
 COMPANY_INFO_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'company_info.csv')
+market_overview_service = get_market_overview_service()
 
 
 def _get_scale_and_suffix(values, base_unit='VND'):
@@ -86,23 +63,7 @@ def _get_scale_and_suffix(values, base_unit='VND'):
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_company_industries():
     """Load level-1 industry classification from local CSV once."""
-    company_df = fetch_data_from_csv(COMPANY_INFO_PATH)
-    if company_df.empty or 'symbol' not in company_df.columns:
-        return pd.DataFrame(columns=['symbol', 'industry_level_1'])
-
-    mapping = company_df.copy()
-    mapping['symbol'] = mapping['symbol'].astype(str).str.upper()
-
-    if 'icb_name' in mapping.columns:
-        mapping = mapping.rename(columns={'icb_name': 'industry_level_1'})
-    elif 'industry' in mapping.columns:
-        mapping = mapping.rename(columns={'industry': 'industry_level_1'})
-    else:
-        mapping['industry_level_1'] = 'Ngành khác'
-
-    mapping['industry_level_1'] = mapping['industry_level_1'].fillna('Ngành khác')
-
-    return mapping[['symbol', 'industry_level_1']]
+    return market_overview_service.load_company_industries(COMPANY_INFO_PATH)
 
 
 def get_industry_order():
@@ -122,7 +83,6 @@ REALTIME_LABELS = {
     "UPCOMINDEX": "UPCoM",
     "UPCOM": "UPCoM",
 }
-REALTIME_SYMBOL_KEYS = sorted({symbol.upper() for symbol in REALTIME_INDEX_SYMBOLS} | {symbol.upper() for symbol in REALTIME_LABELS.keys()})
 
 # ==================== TÙY CHỈNH CSS ====================
 DASHBOARD_STYLE = """
@@ -296,125 +256,10 @@ DASHBOARD_STYLE = """
 CHART_GAP_DIV = "<div class='chart-gap'></div>"
 
 
-# ==================== MÔ-ĐUN 4: DANH MỤC ĐẦU TƯ HIỆN TẠI ====================
-def render_current_portfolio():
-    """Hiển thị tổng quan danh mục đầu tư."""
-    # Lấy danh sách cổ phiếu đã chọn từ session state
-    selected_stocks = st.session_state.get('selected_stocks', [])
-    
-    if not selected_stocks:
-        # Nếu chưa có danh mục, hiển thị thông báo và nút điều hướng
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    border-radius: 12px; padding: 2rem; margin-bottom: 1.5rem; 
-                    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);">
-            <h3 style="color: white; margin: 0 0 1rem 0; font-size: 1.5rem;">
-                 Chưa có Danh Mục Đầu Tư
-            </h3>
-            <p style="color: rgba(255, 255, 255, 0.9); margin: 0; font-size: 1rem; line-height: 1.6;">
-                Bạn chưa chọn cổ phiếu nào cho danh mục đầu tư. 
-                Hãy bắt đầu bằng cách chọn các mã cổ phiếu để phân tích và tối ưu hóa!
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button(" Đi đến Chọn Cổ Phiếu", width='stretch', type="primary"):
-                update_current_tab("Tự chọn mã cổ phiếu")
-        return
-    
-    
-    # Lấy dữ liệu giá
-    left_col, right_col = st.columns([1, 1])
-    with left_col:
-        try:
-            with st.spinner("Đang tải dữ liệu..."):
-                stock_data, skipped_ticker = fetch_stock_data2(
-                    selected_stocks, 
-                    start_date=ANALYSIS_START_DATE, 
-                    end_date=ANALYSIS_END_DATE, 
-                    verbose=False
-                )
-                
-                if not stock_data.empty:
-                    # Tính % thay đổi 7 ngày
-                    if len(stock_data) > 1:
-                        pct_change_7d = ((stock_data.iloc[-1] - stock_data.iloc[0]) / stock_data.iloc[0] * 100)
-                    else:
-                        pct_change_7d = pd.Series(0, index=stock_data.columns)
-                    
-                    # Lấy giá mới nhất
-                    latest_prices = stock_data.iloc[-1]
-                    
-                   
-                    stock_items = []
-                    for symbol in selected_stocks:
-                        price = latest_prices.get(symbol, 0)
-                        pct = pct_change_7d.get(symbol, 0)
-                        
-                        price_display = f"{price*1000:,.0f}" if price > 0 else "—"
-                        
-                        if pct > 0:
-                            change_class = "stock-change-positive"
-                            change_text = f"{pct:.2f}%"
-                        elif pct < 0:
-                            change_class = "stock-change-negative"
-                            change_text = f"{pct:.2f}%"
-                        else:
-                            change_class = "stock-change-positive"
-                            change_text = "0.00%"
-                        
-                        stock_items.append(f'''<div class="stock-item">
-                            <div class="stock-symbol">{symbol}</div>
-                            <div class="stock-price">
-                                <div class="stock-price-value">{price_display}</div>
-                            </div>
-                            <div class="stock-change">
-                                <span class="{change_class}">{change_text}</span>
-                            </div>
-                        </div>''')
-                    
-                    # Full HTML với container và header
-                    full_html = f'''
-                    <div class="portfolio-container">
-                        <div class="portfolio-header">
-                            <div class="portfolio-header-icon">
-                                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                            </div>
-                            <span class="portfolio-title">Danh Mục Của Tôi</span>
-                        </div>
-                        <div class="stock-list-header">
-                            <span>Mã CP</span>
-                            <span>Giá (VNĐ)</span>
-                            <span>% Thay đổi</span>
-                        </div>
-                        <div class="stock-list">
-                            {''.join(stock_items)}
-                        </div>
-                    </div>
-                    '''
-                    st.markdown(full_html, unsafe_allow_html=True)
-                else:
-                    st.info("Không có dữ liệu để hiển thị.")
-        except Exception as e:
-            st.error(f"Lỗi khi tải dữ liệu: {e}")
-    with right_col:
-        plot_interactive_stock_chart(stock_data, selected_stocks)
-
-
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_overview_data():
     """Fetch lightweight data powering the headline KPI cards and charts."""
-
-    analysis_start = pd.to_datetime(ANALYSIS_START_DATE).strftime("%Y-%m-%d")
-    analysis_end = pd.to_datetime(ANALYSIS_END_DATE).strftime("%Y-%m-%d")
-    months_span = max(1, int((pd.to_datetime(analysis_end) - pd.to_datetime(analysis_start)).days / 30))
-
-    return {
-        'indices_metrics': get_market_indices_metrics(),
-        'index_history': get_indices_history(start_date=analysis_start, end_date=analysis_end, months=months_span),
-    }
+    return market_overview_service.load_overview_data(ANALYSIS_START_DATE, ANALYSIS_END_DATE)
 
 
 # ==================== MÔ-ĐUN 1: KPI CHỈ SỐ THỊ TRƯỜNG ====================
@@ -468,123 +313,7 @@ def generate_market_indices_kpi(metrics):
             unsafe_allow_html=True,
         )
 def _build_realtime_metrics():
-    # Attempt to fetch realtime board
-    board = get_realtime_index_board(REALTIME_INDEX_SYMBOLS)
-    
-    # Init empty list for fallback logic
-    metrics = []
-    
-    history_cache = {}
-
-    def _safe_float(value):
-        try:
-            if pd.isna(value):
-                return None
-            return float(value)
-        except Exception:
-            return None
-
-    def _get_sorted_history(symbol_key):
-        if symbol_key not in history_cache:
-            # Optimize: 1 month is plenty for prev close
-            history = get_index_history(symbol_key, months=1)
-            history_cache[symbol_key] = history.sort_values('time') if not history.empty else pd.DataFrame()
-        return history_cache[symbol_key]
-    
-    # If board exists, map it
-    if board is not None and not board.empty:
-        for _, row in board.iterrows():
-            symbol_key = str(row['symbol']).upper()
-            price = _safe_float(row.get('gia_khop'))
-            reference = _safe_float(row.get('gia_tham_chieu'))
-            change = _safe_float(row.get('thay_doi'))
-            pct_change = _safe_float(row.get('ty_le_thay_doi'))
-            note_ts = row.get('last_updated')
-            note_text = None
-
-            # Logic to handle missing price but having reference (pre-market?)
-            if reference in (None, 0) and price is not None and change is not None:
-                reference = price - change
-
-            if price in (None, 0) and reference not in (None, 0):
-                # Fallback to ref if price is zero (rare but happens)
-                price = reference
-                change = 0.0
-                pct_change = 0.0
-                note_text = 'Chưa có khớp · Hiển thị tham chiếu'
-            elif price in (None, 0):
-                # Deep fallback to history if row exists but empty stats
-                history = _get_sorted_history(symbol_key)
-                if history.empty:
-                    continue
-                last_row = history.iloc[-1]
-                prev_row = history.iloc[-2] if len(history) > 1 else last_row
-                price = float(last_row['close'])
-                reference = float(prev_row['close']) if pd.notna(prev_row['close']) else price
-                change = price - reference
-                pct_change = (change / reference * 100) if reference not in (0, None) else 0.0
-                note_text = 'Dữ liệu cuối phiên'
-                note_ts = pd.to_datetime(last_row['time']).to_pydatetime()
-            else:
-                base_reference = reference if reference not in (None, 0) else None
-                if base_reference is None and change is not None:
-                    base_reference = price - change
-                if change is None and base_reference is not None:
-                    change = price - base_reference
-                if pct_change is None and base_reference not in (None, 0):
-                    pct_change = (change / base_reference * 100) if change is not None else 0.0
-
-            if change is None: change = 0.0
-            if pct_change is None: pct_change = 0.0
-            if note_text is None: note_text = f"Thay đổi {change:+.2f} điểm"
-
-            metrics.append({
-                'symbol': symbol_key,
-                'label': REALTIME_LABELS.get(symbol_key, symbol_key),
-                'value': price,
-                'change': change,
-                'pct_change': pct_change,
-                'note': note_text,
-                'timestamp': note_ts
-            })
-
-    # Fill in missing symbols using History (Fallback for Timeout/Failure)
-    available_symbols = {metric['symbol'] for metric in metrics}
-    
-    for symbol_key in REALTIME_SYMBOL_KEYS:
-        if symbol_key in available_symbols:
-            continue
-            
-        # Manually fetch history for missing
-        history = _get_sorted_history(symbol_key)
-        if history.empty:
-            continue
-            
-        last_row = history.iloc[-1]
-        prev_row = history.iloc[-2] if len(history) > 1 else last_row
-        
-        last_close = float(last_row['close']) if pd.notna(last_row['close']) else None
-        prev_close = float(prev_row['close']) if pd.notna(prev_row['close']) else None
-        
-        if last_close is None:
-            continue
-            
-        change = last_close - (prev_close if prev_close is not None else last_close)
-        pct_change = (change / prev_close * 100) if prev_close not in (0, None) else 0.0
-        
-        timestamp = pd.to_datetime(last_row['time']).to_pydatetime()
-        
-        metrics.append({
-            'symbol': symbol_key,
-            'label': REALTIME_LABELS.get(symbol_key, symbol_key),
-            'value': last_close,
-             'change': change,
-            'pct_change': pct_change,
-            'note': 'Dữ liệu cuối phiên',
-            'timestamp': timestamp
-        })
-        
-    return metrics
+    return market_overview_service.build_realtime_metrics(REALTIME_INDEX_SYMBOLS, REALTIME_LABELS)
 
 
 def render_realtime_market_overview():
@@ -714,42 +443,15 @@ def generate_index_comparison_chart(index_history: pd.DataFrame):
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_sector_snapshot_cached():
     """Cache-reuse the sector snapshot with only essential columns."""
-    snapshot = get_sector_snapshot(exchange='HOSE', size=250)
-    
-    if snapshot.empty:
-        return snapshot
-
-    # Filter columns if they exist
-    cols_to_keep = [c for c in SNAPSHOT_COLUMNS if c in snapshot.columns]
-    if cols_to_keep:
-        snapshot = snapshot[cols_to_keep]
-
     companies = load_company_industries()
-    if not companies.empty and 'ticker' in snapshot.columns:
-        working = snapshot.copy()
-        working['ticker'] = working['ticker'].astype(str).str.upper()
-        merged = working.merge(companies, left_on='ticker', right_on='symbol', how='left')
-        merged['industry_level_1'] = merged['industry_level_1'].fillna(merged.get('industry', 'Ngành khác'))
-        merged['industry'] = merged['industry_level_1']
-        merged = merged.drop(columns=['symbol'], errors='ignore')
-        return merged
-
-    return snapshot
+    return market_overview_service.load_sector_snapshot(companies, size=250)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_detail_data():
     """Load heavier, sector-dependent datasets for secondary visuals."""
-
     sector_snapshot = load_sector_snapshot_cached()
-    return {
-        'sector_snapshot': sector_snapshot,
-        'sector_perf': summarize_sector_performance(sector_snapshot, top_n=None),
-        'market_cap': summarize_market_cap_distribution(sector_snapshot, top_n=8),
-        'foreign_flow': get_foreign_flow_leaderboard(sector_snapshot, top_n=6),
-        'liquidity': get_liquidity_leaders(sector_snapshot, top_n=40),
-        'correlation': get_return_correlation_matrix(),
-    }
+    return market_overview_service.load_detail_data(sector_snapshot)
 
 
 # ==================== MÔ-ĐUN 4: HIỆU SUẤT NGÀNH ====================

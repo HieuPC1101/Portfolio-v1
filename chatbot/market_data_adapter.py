@@ -6,8 +6,7 @@ Sử dụng 100% các hàm có sẵn từ fetchers.py và fundamentals.py
 import re
 from datetime import datetime, timedelta
 from typing import Optional, Set, Dict, List
-from data_process.fetchers import fetch_stock_data2, get_latest_prices, get_index_history, fetch_ohlc_data
-from data_process.fundamentals import fetch_fundamental_data
+from backend.services.market_service import PriceQuery, get_market_data_service
 
 
 class MarketDataAdapter:
@@ -19,6 +18,7 @@ class MarketDataAdapter:
     def __init__(self):
         """Khởi tạo adapter"""
         self.stock_pattern = re.compile(r'\b([A-Z]{3,4})\b')
+        self.market_service = get_market_data_service()
         self.common_words = {
             'THE', 'AND', 'FOR', 'NOT', 'BUT', 'CAN', 'ARE', 'WAS', 'HAS', 'HAD',
             'YOU', 'ALL', 'HER', 'ONE', 'OUR', 'OUT', 'DAY', 'GET', 'HIM', 'HIS',
@@ -66,7 +66,9 @@ class MarketDataAdapter:
             start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
             
             # Gọi hàm có sẵn
-            data, _ = fetch_stock_data2([symbol], start_date, end_date, verbose=False)
+            data, _ = self.market_service.fetch_prices(
+                PriceQuery(symbols=[symbol], start_date=start_date, end_date=end_date, verbose=False)
+            )
             
             if data.empty or symbol not in data.columns:
                 return None
@@ -79,7 +81,7 @@ class MarketDataAdapter:
             prev = float(prices.iloc[-2])
             
             # Lấy OHLC và volume
-            ohlc = fetch_ohlc_data(symbol, start_date, end_date)
+            ohlc = self.market_service.fetch_ohlc(symbol, start_date, end_date)
             volume = 0
             high = latest
             low = latest
@@ -118,7 +120,7 @@ class MarketDataAdapter:
         """
         try:
             # Gọi hàm có sẵn
-            return fetch_fundamental_data(symbol)
+            return self.market_service.fundamental_data(symbol)
         except Exception as e:
             print(f"Lỗi get_stock_fundamental_info {symbol}: {e}")
             return None
@@ -140,7 +142,9 @@ class MarketDataAdapter:
             start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
             
             # Gọi hàm có sẵn
-            data, _ = fetch_stock_data2([symbol], start_date, end_date, verbose=False)
+            data, _ = self.market_service.fetch_prices(
+                PriceQuery(symbols=[symbol], start_date=start_date, end_date=end_date, verbose=False)
+            )
             
             if data.empty or symbol not in data.columns:
                 return None
@@ -176,7 +180,7 @@ class MarketDataAdapter:
             for index_symbol in indices:
                 try:
                     # Gọi hàm có sẵn
-                    history = get_index_history(symbol=index_symbol, months=1, source='VCI')
+                    history = self.market_service.index_history(symbol=index_symbol, months=1, source='VCI')
                     
                     if history is not None and not history.empty:
                         history = history.sort_values('time')
@@ -214,7 +218,7 @@ class MarketDataAdapter:
             # Realtime info
             realtime = self.get_stock_realtime_info(symbol)
             if realtime:
-                lines.append("📊 Dữ liệu giao dịch:")
+                lines.append(" Dữ liệu giao dịch:")
                 lines.append(f"- Giá hiện tại: {realtime['price']:,.0f} VND ({realtime['change_percent']:+.2f}%)")
                 lines.append(f"- Khối lượng: {realtime['volume']:,} cp")
                 lines.append(f"- Vùng giá: {realtime['low']:,.0f} - {realtime['high']:,.0f} VND\n")
@@ -222,7 +226,7 @@ class MarketDataAdapter:
             # Fundamental info
             fundamental = self.get_stock_fundamental_info(symbol)
             if fundamental:
-                lines.append("📈 Chỉ số tài chính:")
+                lines.append(" Chỉ số tài chính:")
                 if fundamental.get('pe'): lines.append(f"- P/E: {fundamental['pe']:.2f}")
                 if fundamental.get('pb'): lines.append(f"- P/B: {fundamental['pb']:.2f}")
                 if fundamental.get('eps'): lines.append(f"- EPS: {fundamental['eps']:,.0f}")
@@ -232,7 +236,7 @@ class MarketDataAdapter:
             # History info
             history = self.get_stock_history(symbol, 30)
             if history:
-                lines.append("📉 Lịch sử 30 ngày:")
+                lines.append(" Lịch sử 30 ngày:")
                 lines.append(f"- Giá TB: {history['avg_price']:,.0f} VND")
                 lines.append(f"- Biên độ: {history['min_price']:,.0f} - {history['max_price']:,.0f} VND")
                 lines.append(f"- Thay đổi: {history['change_percent']:+.2f}%")
@@ -255,7 +259,7 @@ class MarketDataAdapter:
             Chuỗi text so sánh hoặc None
         """
         try:
-            lines = ["\n📊 DỮ LIỆU REALTIME CÁC MÃ CỔ PHIẾU:\n"]
+            lines = ["\n DỮ LIỆU REALTIME CÁC MÃ CỔ PHIẾU:\n"]
             
             for symbol in symbols[:3]:
                 realtime = self.get_stock_realtime_info(symbol)
@@ -286,10 +290,10 @@ class MarketDataAdapter:
             Chuỗi text thông tin giá hoặc None
         """
         try:
-            lines = ["\n📊 DỮ LIỆU REALTIME:\n"]
+            lines = ["\n DỮ LIỆU REALTIME:\n"]
             
             # Gọi hàm có sẵn
-            prices = get_latest_prices(symbols[:3])
+            prices = self.market_service.latest_prices(symbols[:3])
             
             for symbol in symbols[:3]:
                 if symbol in prices:
@@ -313,7 +317,7 @@ class MarketDataAdapter:
             if not indices:
                 return None
             
-            lines = ["📊 DỮ LIỆU CHỈ SỐ THỊ TRƯỜNG (REALTIME):"]
+            lines = [" DỮ LIỆU CHỈ SỐ THỊ TRƯỜNG (REALTIME):"]
             
             for index_name, data in indices.items():
                 lines.append(f"\n{index_name}: {data['value']:,.2f} điểm")

@@ -33,7 +33,7 @@ def display_selected_stocks(df):
                 col2.write(organ_name)  # Tên công ty
                 col3.write(icb_name)  # Tên ngành
                 col4.write(exchange)
-                if col5.button(f"❌", key=f"remove_{stock}"):  # Nút xóa
+                if col5.button(f"", key=f"remove_{stock}"):  # Nút xóa
                     st.session_state.selected_stocks.remove(stock)
                     st.rerun()  # Làm mới lại giao diện sau khi xóa
     else:
@@ -75,7 +75,7 @@ def display_selected_stocks_2(df):
                 col3.write(icb_name)  # Tên ngành
                 col4.write(exchange)  # Sàn giao dịch
                 with col5:
-                    if st.button(f"❌", key=f"remove_{stock}"):  # Nút xóa từng mã cổ phiếu
+                    if st.button(f"", key=f"remove_{stock}"):  # Nút xóa từng mã cổ phiếu
                         st.session_state.selected_stocks_2.remove(stock)
                         st.success(f"Đã xóa mã cổ phiếu '{stock}' khỏi danh sách!")
                         st.rerun()  # Làm mới giao diện sau khi xóa

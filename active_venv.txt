@@ -1,0 +1,1 @@
+d:\Projects\Remake\Portfolio-Project\.venv\Scripts\Activate.ps1

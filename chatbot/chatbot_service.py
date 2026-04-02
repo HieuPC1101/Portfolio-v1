@@ -3,35 +3,10 @@ Chatbot Service - Xử lý logic AI chatbot cho ứng dụng danh mục đầu t
 Sử dụng Google Gemini API (miễn phí)
 """
 
-import os
 from datetime import datetime
-import importlib
 import google.generativeai as genai
 from chatbot.market_data_adapter import get_market_data_adapter
-
-
-def load_gemini_api_key() -> str:
-    """Ưu tiên sử dụng biến môi trường rồi tới tệp bí mật cục bộ."""
-    env_key = os.getenv("GEMINI_API_KEY")
-    if env_key:
-        return env_key
-
-    # Thử nhiều đường dẫn import khác nhau để tránh lỗi KeyError: 'scripts'
-    module_candidates = (
-        "secret_config",
-        "utils.secret_config",
-        "scripts.utils.secret_config",
-    )
-    for module_name in module_candidates:
-        try:
-            module = importlib.import_module(module_name)
-            secret_key = getattr(module, "GEMINI_API_KEY", "")
-            if secret_key:
-                return secret_key
-        except ModuleNotFoundError:
-            continue
-
-    return ""
+from utils.secrets import load_gemini_api_key
 
 
 class PortfolioChatbot:

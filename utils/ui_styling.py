@@ -158,7 +158,7 @@ def create_metric_card(label, value, gradient="purple"):
     """
 
 
-def create_section_header(title, icon="📊"):
+def create_section_header(title, icon=""):
     """
     Create a styled section header.
     

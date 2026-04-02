@@ -530,7 +530,7 @@ def display_detailed_allocation(results_dict):
     Args:
         results_dict (dict): Dictionary chứa kết quả của các mô hình
     """
-    st.subheader("📊 Chi tiết Phân bổ Số lượng Cổ phiếu")
+    st.subheader(" Chi tiết Phân bổ Số lượng Cổ phiếu")
     
     # Tạo DataFrame tổng hợp
     all_tickers = set()
@@ -562,7 +562,7 @@ def display_weight_comparison(results_dict):
     Args:
         results_dict (dict): Dictionary chứa kết quả của các mô hình
     """
-    st.subheader("📈 So sánh Trọng số Danh mục (%)")
+    st.subheader(" So sánh Trọng số Danh mục (%)")
     
     # Tạo DataFrame tổng hợp
     all_tickers = set()
@@ -595,11 +595,11 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
         results_dict (dict): Dictionary chứa kết quả của các mô hình
         metrics_cache (dict, optional): Pre-computed metrics cache
     """
-    st.markdown(create_section_header("Hệ thống Khuyến nghị Đầu tư", "💡"), unsafe_allow_html=True)
+    st.markdown(create_section_header("Hệ thống Khuyến nghị Đầu tư", ""), unsafe_allow_html=True)
     st.markdown("""
     <div style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 15px; border-radius: 10px; margin: 15px 0;">
         <p style="margin: 0; color: #1a73e8; font-weight: 600;">
-            🎯 Phân tích dựa trên hệ thống chấm điểm ai chuẩn hóa, kết hợp nhiều tiêu chí quan trọng để đưa ra khuyến nghị tốt nhất.
+             Phân tích dựa trên hệ thống chấm điểm ai chuẩn hóa, kết hợp nhiều tiêu chí quan trọng để đưa ra khuyến nghị tốt nhất.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -678,7 +678,7 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
         })
     
     # 6. Hiển thị bảng chi tiết điểm số (minh bạch hóa)
-    with st.expander("📊 Chi tiết Bảng Điểm - Cách tính Điểm số", expanded=False):
+    with st.expander(" Chi tiết Bảng Điểm - Cách tính Điểm số", expanded=False):
         st.markdown("""
         **Phương pháp chấm điểm chuẩn hóa (Normalized Scoring)**
         
@@ -694,13 +694,13 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
         df_scores = pd.DataFrame(score_details)
         st.dataframe(df_scores, width='stretch', height=300)
         
-        st.caption("💡 Cột 'Score' là điểm chuẩn hóa (0-100), cột 'raw' là giá trị gốc")
+        st.caption(" Cột 'Score' là điểm chuẩn hóa (0-100), cột 'raw' là giá trị gốc")
     
     # Sắp xếp theo điểm tổng hợp
     sorted_models = sorted(scores.items(), key=lambda x: x[1]['total_score'], reverse=True)
     
     # Hiển thị top 3 khuyến nghị với styled header
-    st.markdown("### 🏆 Top 3 Phương án Được Khuyến nghị")
+    st.markdown("###  Top 3 Phương án Được Khuyến nghị")
     st.markdown("""
     <div style="background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); 
                 padding: 12px 20px; 
@@ -708,13 +708,13 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
                 border-left: 4px solid #00acc1;
                 margin-bottom: 20px;">
         <p style="margin: 0; color: #006064; font-size: 14px;">
-            💡 <strong>Công thức tính điểm (Thang 0-100):</strong> Sharpe (40%) + Lợi nhuận (30%) + Đa dạng hóa (20%) + Hiệu quả vốn (10%)
+             <strong>Công thức tính điểm (Thang 0-100):</strong> Sharpe (40%) + Lợi nhuận (30%) + Đa dạng hóa (20%) + Hiệu quả vốn (10%)
         </p>
     </div>
     """, unsafe_allow_html=True)
     
     for rank, (model_name, score_data) in enumerate(sorted_models[:3], 1):
-        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉"
+        medal = "" if rank == 1 else "" if rank == 2 else ""
         
         # Tự động mở rộng top 1
         is_expanded = (rank == 1)
@@ -735,7 +735,7 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
             
             # Đưa ra nhận xét
             if rank == 1:
-                st.success(f"✅ **{model_name}** là lựa chọn tốt nhất với hiệu suất tổng hợp cao nhất.")
+                st.success(f" **{model_name}** là lựa chọn tốt nhất với hiệu suất tổng hợp cao nhất.")
             
             # Phân tích điểm mạnh
             strengths = []
@@ -753,7 +753,7 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
             
             # THÊM: Bảng danh mục đầu tư
             st.markdown("---")
-            st.markdown("#### 📋 Danh mục đầu tư được đề xuất")
+            st.markdown("####  Danh mục đầu tư được đề xuất")
             
             # Lấy thông tin từ result
             result = results_dict.get(model_name)
@@ -791,22 +791,22 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
                 # Hiển thị tổng kết
                 col_a, col_b, col_c = st.columns(3)
                 with col_a:
-                    st.metric("💰 Tổng vốn đầu tư", f"{total_invested:,.0f} VND")
+                    st.metric(" Tổng vốn đầu tư", f"{total_invested:,.0f} VND")
                 with col_b:
-                    st.metric("💵 Số tiền còn lại", f"{leftover:,.0f} VND")
+                    st.metric(" Số tiền còn lại", f"{leftover:,.0f} VND")
                 with col_c:
-                    st.metric("📊 Tổng vốn", f"{total_capital:,.0f} VND")
+                    st.metric(" Tổng vốn", f"{total_capital:,.0f} VND")
 
     
     # Hướng dẫn lựa chọn
     st.markdown("---")
-    st.markdown("### 📝 Hướng dẫn Lựa chọn")
+    st.markdown("###  Hướng dẫn Lựa chọn")
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
-        **🎯 Chọn mô hình phù hợp với mục tiêu:**
+        ** Chọn mô hình phù hợp với mục tiêu:**
         - **Max Sharpe / Markowitz**: Cân bằng lợi nhuận và rủi ro
         - **Min Volatility**: Ưu tiên an toàn, ít biến động
         - **Min CVaR / Min CDaR**: Phòng ngừa tổn thất cực đoan
@@ -815,7 +815,7 @@ def provide_investment_recommendation(results_dict, metrics_cache=None):
     
     with col2:
         st.markdown("""
-        **🔍 Các tiêu chí quan trọng:**
+        ** Các tiêu chí quan trọng:**
         - **Tỷ lệ Sharpe**: Hiệu suất điều chỉnh theo rủi ro
         - **Return/Risk**: Lợi nhuận trên mỗi đơn vị rủi ro
         - **Đa dạng hóa**: Mức độ phân tán đầu tư
@@ -831,18 +831,18 @@ def render_optimization_comparison_tab(results_dict):
         results_dict (dict): Dictionary chứa kết quả của các mô hình
                            {'Tên mô hình': result_dict}
     """
-    st.title("📊 Tổng hợp & So sánh Kết quả Tối ưu hóa")
+    st.title(" Tổng hợp & So sánh Kết quả Tối ưu hóa")
     
     if not results_dict or all(r is None for r in results_dict.values()):
         st.info("""
-        👋 Chào mừng đến với tab **Tổng hợp Kết quả**!
+         Chào mừng đến với tab **Tổng hợp Kết quả**!
         
-        📌 **Hướng dẫn sử dụng:**
+         **Hướng dẫn sử dụng:**
         1. Chọn tab **"Tự chọn mã cổ phiếu"** hoặc **"Hệ thống đề xuất mã cổ phiếu tự động"**
         2. Chạy các mô hình tối ưu hóa (Markowitz, Max Sharpe, Min Volatility, v.v.)
         3. Kết quả sẽ được tự động lưu và hiển thị ở đây để so sánh
         
-        💡 Tab này giúp bạn:
+         Tab này giúp bạn:
         - So sánh hiệu suất các mô hình
         - Phân tích rủi ro - lợi nhuận
         - Đưa ra quyết định đầu tư tối ưu
@@ -866,7 +866,7 @@ def render_optimization_comparison_tab(results_dict):
     logger.info(f"Successfully cached metrics for {len(metrics_cache)} models")
     
     # Summary metrics cards with gradients
-    st.markdown("### 📈 Tổng quan Nhanh")
+    st.markdown("###  Tổng quan Nhanh")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -901,13 +901,13 @@ def render_optimization_comparison_tab(results_dict):
     
     # Tab con cho các phần khác nhau
     tab1, tab2, tab3 = st.tabs([
-        "📋 Bảng So sánh Tổng quan",
-        "📊 Biểu đồ Phân tích",
-        "💡 Khuyến nghị Đầu tư"
+        " Bảng So sánh Tổng quan",
+        " Biểu đồ Phân tích",
+        " Khuyến nghị Đầu tư"
     ])
     
     with tab1:
-        st.markdown("### 📋 Bảng So sánh Các Chỉ số Chính")
+        st.markdown("###  Bảng So sánh Các Chỉ số Chính")
         comparison_df = create_comparison_table(valid_results, metrics_cache)
         
         # Hiển thị bảng với highlight
@@ -915,7 +915,7 @@ def render_optimization_comparison_tab(results_dict):
         st.dataframe(styled_df, width='stretch', height=400)
         
         st.markdown("""
-        **📌 Chú thích:**
+        ** Chú thích:**
         - <span style="background-color: #90EE90; font-weight: bold; padding: 2px 6px;">Màu xanh đậm</span>: Giá trị tốt nhất trong cột
         - **Lợi nhuận KV**: Lợi nhuận kỳ vọng hàng năm (càng cao càng tốt)
         - **Rủi ro - Std**: Độ lệch chuẩn - biến động giá (càng thấp càng an toàn)
@@ -927,14 +927,14 @@ def render_optimization_comparison_tab(results_dict):
         # Nút download
         csv = comparison_df.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
-            label="📥 Tải xuống bảng so sánh (CSV)",
+            label=" Tải xuống bảng so sánh (CSV)",
             data=csv,
             file_name="so_sanh_toi_uu.csv",
             mime="text/csv"
         )
     
     with tab2:
-        st.markdown("### 📊 Biểu đồ Phân tích So sánh")
+        st.markdown("###  Biểu đồ Phân tích So sánh")
         
         # Biểu đồ Radar tổng quan
         st.markdown("#### Biểu đồ Radar")
@@ -943,21 +943,21 @@ def render_optimization_comparison_tab(results_dict):
         st.markdown("---")
         
         # Rủi ro - Lợi nhuận
-        st.markdown("#### 📈 Rủi ro - Lợi nhuận")
+        st.markdown("####  Rủi ro - Lợi nhuận")
         plot_risk_return_comparison(valid_results, metrics_cache)
         
         st.markdown("---")
-        st.markdown("◼️### 📊 So sánh Chi tiết theo Chỉ số")
+        st.markdown("◼###  So sánh Chi tiết theo Chỉ số")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("**⚡ Tỷ lệ Sharpe**")
+            st.markdown("** Tỷ lệ Sharpe**")
             st.caption("Hiệu suất điều chỉnh rủi ro (càng cao càng tốt)")
             plot_sharpe_comparison(valid_results, metrics_cache)
         
         with col2:
-            st.markdown("**🎯 Mức độ Đa dạng hóa**")
+            st.markdown("** Mức độ Đa dạng hóa**")
             st.caption("Chỉ số đa dạng hóa & số lượng mã cổ phiếu")
             plot_diversification_comparison(valid_results, metrics_cache)
         
@@ -968,8 +968,8 @@ def render_optimization_comparison_tab(results_dict):
         
         # Chi tiết phân bổ
         st.markdown("---")
-        with st.expander("🔍 Xem Chi tiết Trọng số & Số lượng Cổ phiếu", expanded=False):
-            st.info("📌 Bảng chi tiết phân bổ cổ phiếu cho từng mô hình")
+        with st.expander(" Xem Chi tiết Trọng số & Số lượng Cổ phiếu", expanded=False):
+            st.info(" Bảng chi tiết phân bổ cổ phiếu cho từng mô hình")
             col_a, col_b = st.columns(2)
             with col_a:
                 display_weight_comparison(valid_results)

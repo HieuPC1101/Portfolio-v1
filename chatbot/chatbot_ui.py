@@ -8,7 +8,7 @@ from chatbot.chatbot_service import PortfolioChatbot, create_quick_question_butt
 
 def get_welcome_message():
     """Trả về tin nhắn chào mừng"""
-    return """Xin chào! 👋
+    return """Xin chào! 
 
 Tôi là trợ lý AI của Portfolio Dashboard. Bạn cần giúp gì hôm nay? Hãy thử bắt đầu bằng việc:"""
 
@@ -39,7 +39,7 @@ def initialize_chatbot_session():
             # Kiểm tra API key có hợp lệ không
             if not GEMINI_API_KEY or GEMINI_API_KEY == "your-gemini-api-key-here":
                 st.session_state.chatbot = None
-                st.session_state.chatbot_error = "Chưa cấu hình GEMINI_API_KEY trong config.py"
+                st.session_state.chatbot_error = "Chưa cấu hình GEMINI_API_KEY"
             else:
                 st.session_state.chatbot = PortfolioChatbot(GEMINI_API_KEY)
                 
@@ -107,7 +107,7 @@ def render_chatbot_sidebar(portfolio_context=None):
     if st.session_state.chatbot is None:
         with st.sidebar:
             st.warning(st.session_state.get('chatbot_error', 'Lỗi khởi tạo chatbot'))
-            st.info("Vui lòng thêm `GEMINI_API_KEY = 'your-api-key'` vào file scripts/config.py\n\nLấy API key miễn phí tại: https://makersuite.google.com/app/apikey")
+            st.info("Vui lòng đặt biến môi trường `GEMINI_API_KEY` hoặc khai báo trong `utils/secret_config.py`.\n\nLấy API key miễn phí tại: https://makersuite.google.com/app/apikey")
         return
     
     # Tạo expander cho chatbot với các nút hành động bên trong
@@ -350,7 +350,7 @@ def render_chatbot_page():
     # Kiểm tra lỗi cấu hình
     if st.session_state.chatbot is None:
         st.error(st.session_state.get('chatbot_error', 'Lỗi khởi tạo chatbot'))
-        st.info("Vui lòng thêm GEMINI_API_KEY vào file scripts/config.py. Lấy API key miễn phí tại: https://makersuite.google.com/app/apikey")
+        st.info("Vui lòng đặt biến môi trường GEMINI_API_KEY hoặc khai báo trong utils/secret_config.py. Lấy API key miễn phí tại: https://makersuite.google.com/app/apikey")
         return
     
     # Container cho chat với chiều cao lớn hơn
@@ -401,4 +401,3 @@ def render_chatbot_page():
         handle_user_message(user_input, portfolio_context, chat_parent=chat_container)
         st.session_state.show_quick_questions = False
         st.rerun()
-

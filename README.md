@@ -40,7 +40,7 @@ pip install -r requirements.txt
 
 ### Cấu hình API (cho Chatbot)
 
-Tạo file `scripts/secret_config.py`:
+Tạo file `utils/secret_config.py`:
 
 ```python
 GEMINI_API_KEY = "your-api-key"
@@ -53,13 +53,13 @@ GEMINI_API_KEY = "your-api-key"
 **Với UV:**
 
 ```bash
-uv run streamlit run scripts/dashboard.py
+uv run streamlit run main.py
 ```
 
 **Với Pip:**
 
 ```bash
-streamlit run scripts/dashboard.py
+streamlit run main.py
 ```
 
 Truy cập: `http://localhost:8501`
