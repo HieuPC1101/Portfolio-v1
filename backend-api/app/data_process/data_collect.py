@@ -1,8 +1,13 @@
+import sys
+import os
+
+# Ensure 'backend-api/' is on path so app.* imports work when run as script
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 import pandas as pd
 import schedule
 import time
 from vnstock import Vnstock
-import os
 import logging
 import argparse
 
@@ -13,21 +18,29 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 
-# Đường dẫn đến thư mục 'data'
-data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-os.makedirs(data_dir, exist_ok=True)
-file_path = os.path.join(data_dir, "company_info.csv")
 
-# Hàm lưu DataFrame vào file CSV
-def save_to_csv(df, file_path):
+def save_to_db(df: pd.DataFrame) -> None:
+    """Upsert company info DataFrame vào database."""
+    from app.database import SessionLocal
+    from app.models.company_info import CompanyInfo
+
+    db = SessionLocal()
     try:
-        # Luôn ghi đè dữ liệu mới lên dữ liệu cũ
-        df.to_csv(file_path, mode='w', header=True, index=False)
-        logging.info(f"Dữ liệu đã được ghi đè lên file {file_path}!")
+        # Xóa toàn bộ dữ liệu cũ rồi insert mới (full refresh)
+        db.query(CompanyInfo).delete()
+        records = df.rename(columns=str.lower).to_dict(orient='records')
+        db.bulk_insert_mappings(CompanyInfo, records)
+        db.commit()
+        logging.info(f"Đã lưu {len(records)} bản ghi vào database!")
     except Exception as e:
-        logging.error(f"Lỗi khi lưu dữ liệu vào CSV: {e}")
+        db.rollback()
+        logging.error(f"Lỗi khi lưu dữ liệu vào database: {e}")
+        raise
+    finally:
+        db.close()
 
-# Hàm chính để thu thập dữ liệu và lưu vào CSV
+
+# Hàm chính để thu thập dữ liệu và lưu vào database
 def run_task():
     logging.info("Bắt đầu thu thập dữ liệu...")
     try:
@@ -39,22 +52,26 @@ def run_task():
         logging.info(f"Đã lấy dữ liệu các ngành ICB: {len(icb_all)} dòng.")
         result2 = pd.merge(stock_icb, icb_all, left_on='icb_code1', right_on='icb_code', how='inner')[['symbol', 'organ_name', 'icb_name']]
         logging.info(f"Đã tạo bảng kết quả ngành: {len(result2)} dòng.")
+
         def get_stocks_by_exchange(stock, exchange):
             symbols = stock.listing.symbols_by_group(exchange).tolist()
             logging.info(f"Đã lấy {len(symbols)} mã từ sàn {exchange}.")
             return pd.DataFrame({"symbol": symbols, "exchange": exchange})
+
         def get_all_stocks(stock):
             exchanges = ['HOSE', 'HNX', 'UPCOM']
             stock_dfs = [get_stocks_by_exchange(stock, exchange) for exchange in exchanges]
             return pd.concat(stock_dfs, ignore_index=True)
+
         all_stocks_df = get_all_stocks(stock)
         logging.info(f"Tổng số mã chứng khoán từ các sàn: {len(all_stocks_df)}.")
         result3 = pd.merge(result2, all_stocks_df, on='symbol', how='inner')
         logging.info(f"Kết quả cuối cùng sau khi ghép: {len(result3)} dòng.")
-        save_to_csv(result3, file_path)
+        save_to_db(result3)
         logging.info("Công việc đã hoàn thành và dữ liệu được cập nhật!")
     except Exception as e:
         logging.error(f"Lỗi trong quá trình thu thập dữ liệu: {e}")
+
 
 # Chế độ chạy: ngay hoặc schedule
 def main():
@@ -69,6 +86,7 @@ def main():
         while True:
             schedule.run_pending()
             time.sleep(1)
+
 
 if __name__ == "__main__":
     main()

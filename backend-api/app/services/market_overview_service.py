@@ -7,7 +7,6 @@ from typing import Dict, Iterable, List, Optional
 import pandas as pd
 
 from data_process.data_loader import (
-    fetch_data_from_csv,
     get_foreign_flow_leaderboard,
     get_index_history,
     get_indices_history,
@@ -23,24 +22,23 @@ from data_process.data_loader import (
 class MarketOverviewService:
     """Prepare market-overview datasets consumed by Streamlit UI."""
 
-    def load_company_industries(self, company_info_path: str) -> pd.DataFrame:
-        """Load level-1 industry classification from local CSV."""
-        company_df = fetch_data_from_csv(company_info_path)
-        if company_df.empty or "symbol" not in company_df.columns:
-            return pd.DataFrame(columns=["symbol", "industry_level_1"])
+    def load_company_industries(self) -> pd.DataFrame:
+        """Load level-1 industry classification from database."""
+        from app.database import SessionLocal
+        from app.models.company_info import CompanyInfo
 
-        mapping = company_df.copy()
-        mapping["symbol"] = mapping["symbol"].astype(str).str.upper()
-
-        if "icb_name" in mapping.columns:
-            mapping = mapping.rename(columns={"icb_name": "industry_level_1"})
-        elif "industry" in mapping.columns:
-            mapping = mapping.rename(columns={"industry": "industry_level_1"})
-        else:
-            mapping["industry_level_1"] = "Ngành khác"
-
-        mapping["industry_level_1"] = mapping["industry_level_1"].fillna("Ngành khác")
-        return mapping[["symbol", "industry_level_1"]]
+        db = SessionLocal()
+        try:
+            rows = db.query(CompanyInfo.symbol, CompanyInfo.icb_name).all()
+            if not rows:
+                return pd.DataFrame(columns=["symbol", "industry_level_1"])
+            data = [
+                {"symbol": r.symbol.upper(), "industry_level_1": r.icb_name or "Ngành khác"}
+                for r in rows
+            ]
+            return pd.DataFrame(data)
+        finally:
+            db.close()
 
     def load_overview_data(self, analysis_start_date: str, analysis_end_date: str) -> Dict[str, object]:
         """Fetch lightweight data powering KPI cards and index chart."""

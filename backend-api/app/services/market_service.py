@@ -12,7 +12,6 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import pandas as pd
 
 from data_process.data_loader import (
-    fetch_data_from_csv,
     calculate_metrics,
     fetch_ohlc_data,
     fetch_stock_data2,
@@ -44,9 +43,20 @@ class MarketDataService:
             verbose=query.verbose,
         )
 
-    def load_company_info(self, file_path: str) -> pd.DataFrame:
-        """Load static company metadata from CSV."""
-        return fetch_data_from_csv(file_path)
+    def load_company_info(self) -> pd.DataFrame:
+        """Load static company metadata from database."""
+        from app.database import SessionLocal
+        from app.models.company_info import CompanyInfo
+
+        db = SessionLocal()
+        try:
+            rows = db.query(CompanyInfo).all()
+            return pd.DataFrame([
+                {"symbol": r.symbol, "organ_name": r.organ_name, "icb_name": r.icb_name, "exchange": r.exchange}
+                for r in rows
+            ])
+        finally:
+            db.close()
 
     def fetch_ohlc(self, ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Fetch OHLC data for a single symbol."""

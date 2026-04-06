@@ -1,119 +1,102 @@
-# API Documentation & Testing Guide
+# API Documentation
 
-Hướng dẫn chi tiết về API endpoints, testing và deployment.
-
-## Mục lục
-
-- [API Overview](#api-overview)
-- [Authentication](#authentication)
-- [Market Data API](#market-data-api)
-- [Portfolio API](#portfolio-api)
-- [Optimization API](#optimization-api)
-- [Chatbot API](#chatbot-api)
-- [Testing Guide](#testing-guide)
-- [Deployment](#deployment)
-- [Supabase Setup](#supabase-setup)
+**Base URL:** `http://localhost:8000/api/v1`
+**Auth:** `Authorization: Bearer <access_token>` (tất cả endpoint trừ những endpoint đánh dấu ❌)
+**Content-Type:** `application/json`
+**Docs:** `http://localhost:8000/docs` (Swagger) | `http://localhost:8000/redoc`
 
 ---
 
-## API Overview
+## Mục lục
 
-**Base URL:** `http://localhost:8000/api/v1`
+- [Root & Health](#root--health)
+- [Authentication](#authentication)
+- [Portfolio Management](#portfolio-management)
+- [Market Data](#market-data)
+- [Optimization](#optimization)
+- [Chatbot](#chatbot)
+- [Testing Guide](#testing-guide)
+- [Deployment](#deployment)
 
-**Authentication:** Bearer token (JWT)
+---
 
-**Content-Type:** `application/json`
+## Root & Health
 
-**Auto-generated docs:**
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+| Method | Path | Auth | Mô tả |
+|--------|------|------|-------|
+| GET | `/` | ❌ | Thông tin app |
+| GET | `/health` | ❌ | Health check |
+| GET | `/api/v1/info` | ❌ | API version info |
+
+**GET `/health`**
+```json
+{ "status": "healthy" }
+```
 
 ---
 
 ## Authentication
 
-### Register User
+**Prefix:** `/api/v1/auth`
 
-**Endpoint:** `POST /api/v1/auth/register`
+| Method | Path | Auth | Mô tả |
+|--------|------|------|-------|
+| POST | `/register` | ❌ | Đăng ký tài khoản |
+| POST | `/login` | ❌ | Đăng nhập (OAuth2) |
+| POST | `/refresh` | ❌ | Làm mới access token |
+| POST | `/logout` | ✅ | Đăng xuất |
+| GET | `/me` | ✅ | Thông tin user hiện tại |
 
-**Request:**
+### POST `/register`
 ```json
+// Request
 {
-  "username": "testuser",
+  "username": "testuser",       // 3-50 ký tự, unique
   "email": "test@example.com",
-  "password": "password123",
-  "full_name": "Test User"
+  "password": "password123",    // tối thiểu 8 ký tự
+  "full_name": "Test User"      // optional
 }
-```
 
-**Response:**
-```json
+// Response
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "eyJhbGc...",
+  "refresh_token": "eyJhbGc...",
   "token_type": "bearer"
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "test@example.com",
-    "password": "password123",
-    "full_name": "Test User"
-  }'
-```
-
-### Login
-
-**Endpoint:** `POST /api/v1/auth/login`
-
-**Request:**
+### POST `/login`
 ```json
-{
-  "username": "testuser",
-  "password": "password123"
-}
-```
+// Request (form data hoặc JSON)
+{ "username": "testuser", "password": "password123" }
 
-**Response:**
-```json
+// Response
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "eyJhbGc...",
+  "refresh_token": "eyJhbGc...",
   "token_type": "bearer"
 }
 ```
 
-### Refresh Token
-
-**Endpoint:** `POST /api/v1/auth/refresh`
-
-**Request:**
+### POST `/refresh`
 ```json
-{
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
+// Request
+{ "refresh_token": "eyJhbGc..." }
+
+// Response
+{ "access_token": "eyJhbGc...", "refresh_token": "eyJhbGc...", "token_type": "bearer" }
 ```
 
-**Response:**
+### POST `/logout`
 ```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
-}
+// Request
+{ "refresh_token": "eyJhbGc..." }
+
+// Response
+{ "message": "Successfully logged out" }
 ```
 
-### Get Current User
-
-**Endpoint:** `GET /api/v1/auth/me`
-
-**Headers:** `Authorization: Bearer {access_token}`
-
-**Response:**
+### GET `/me`
 ```json
 {
   "id": 1,
@@ -125,59 +108,135 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 }
 ```
 
-### Logout
+---
 
-**Endpoint:** `POST /api/v1/auth/logout`
+## Portfolio Management
 
-**Headers:** `Authorization: Bearer {access_token}`
+**Prefix:** `/api/v1/portfolios` | Tất cả endpoint yêu cầu auth ✅
 
-**Response:**
+### Portfolios
+
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `` | Tạo portfolio mới |
+| GET | `` | Danh sách portfolios (`?skip=0&limit=100`) |
+| GET | `/{portfolio_id}` | Chi tiết portfolio |
+| PUT | `/{portfolio_id}` | Cập nhật portfolio |
+| DELETE | `/{portfolio_id}` | Xóa portfolio |
+
+**POST `/portfolios`**
 ```json
+// Request
 {
-  "message": "Successfully logged out"
+  "name": "Danh mục dài hạn",
+  "description": "Mô tả...",     // optional
+  "initial_capital": 100000000
+}
+
+// Response
+{
+  "id": 1,
+  "user_id": 1,
+  "name": "Danh mục dài hạn",
+  "description": "Mô tả...",
+  "initial_capital": 100000000,
+  "current_value": 100000000,
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### Portfolio Stocks
+
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `/{portfolio_id}/stocks` | Thêm cổ phiếu |
+| GET | `/{portfolio_id}/stocks` | Danh sách cổ phiếu trong portfolio |
+| PUT | `/{portfolio_id}/stocks/{stock_id}` | Cập nhật vị thế |
+| DELETE | `/{portfolio_id}/stocks/{stock_id}` | Xóa cổ phiếu |
+
+**POST `/{portfolio_id}/stocks`**
+```json
+// Request
+{
+  "symbol": "VCB",
+  "quantity": 100,
+  "purchase_price": 85000
+}
+
+// Response
+{
+  "id": 1,
+  "portfolio_id": 1,
+  "symbol": "VCB",
+  "quantity": 100,
+  "purchase_price": 85000,
+  "added_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### Watchlists
+
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `/watchlists` | Tạo watchlist |
+| GET | `/watchlists` | Danh sách watchlists (`?skip=0&limit=100`) |
+| GET | `/watchlists/{watchlist_id}` | Chi tiết watchlist |
+| PUT | `/watchlists/{watchlist_id}` | Cập nhật watchlist |
+| DELETE | `/watchlists/{watchlist_id}` | Xóa watchlist |
+| POST | `/watchlists/{watchlist_id}/stocks` | Thêm cổ phiếu vào watchlist |
+| DELETE | `/watchlists/{watchlist_id}/stocks/{symbol}` | Xóa cổ phiếu khỏi watchlist |
+
+**POST `/watchlists`**
+```json
+// Request
+{ "name": "Cổ phiếu theo dõi", "description": "..." }
+
+// Response
+{
+  "id": 1,
+  "user_id": 1,
+  "name": "Cổ phiếu theo dõi",
+  "created_at": "2024-01-01T00:00:00Z",
+  "stocks": []
 }
 ```
 
 ---
 
-## Market Data API
+## Market Data
 
-All market endpoints require authentication.
+**Prefix:** `/api/v1/market` | Tất cả endpoint yêu cầu auth ✅
 
-### Get Market Indices
+| Method | Path | Mô tả |
+|--------|------|-------|
+| GET | `/indices` | Chỉ số VN-Index, VN30, HNX, UPCOM |
+| GET | `/overview` | Tổng quan thị trường + top movers |
+| GET | `/sectors` | Hiệu suất theo ngành |
+| GET | `/stock/{symbol}/price` | Lịch sử giá (cache 1h) |
+| GET | `/stock/{symbol}/info` | Thông tin công ty |
+| GET | `/stock/{symbol}/fundamentals` | P/E, P/B, ROE, ROA... (cache 24h) |
+| GET | `/news` | Tin tức thị trường |
+| GET | `/news/{symbol}` | Tin tức theo mã cổ phiếu |
+| GET | `/search` | Tìm kiếm cổ phiếu |
+| POST | `/cache/clear` | Xóa cache dữ liệu |
 
-**Endpoint:** `GET /api/v1/market/indices`
-
-**Headers:** `Authorization: Bearer {access_token}`
-
-**Response:**
+### GET `/indices`
 ```json
 {
-  "vnindex": {
-    "value": 1234.56,
-    "change": 12.34,
-    "change_percent": 1.01,
-    "volume": 500000000,
-    "time": "2024-12-31T15:00:00Z"
-  },
-  "vn30": {...},
-  "hnx": {...},
-  "upcom": {...}
+  "vnindex": { "name": "VN-Index", "value": 1234.56, "change": 12.34, "change_percent": 1.01, "volume": 500000000 },
+  "vn30": { ... },
+  "hnx": { ... },
+  "upcom": { ... },
+  "timestamp": "2024-12-31T15:00:00Z"
 }
 ```
 
-### Get Market Overview
-
-**Endpoint:** `GET /api/v1/market/overview`
-
-**Response:**
+### GET `/overview`
 ```json
 {
-  "indices": {...},
-  "top_gainers": [
-    {"symbol": "VCB", "price": 85000, "change_percent": 5.5},
-    ...
-  ],
+  "indices": { ... },
+  "top_gainers": [{ "symbol": "VCB", "price": 85000, "change_percent": 5.5 }],
   "top_losers": [...],
   "top_volume": [...],
   "market_stats": {
@@ -190,78 +249,22 @@ All market endpoints require authentication.
 }
 ```
 
-### Get Sector Performance
+### GET `/stock/{symbol}/price`
 
-**Endpoint:** `GET /api/v1/market/sectors`
-
-**Response:**
-```json
-{
-  "sectors": [
-    {
-      "name": "Banking",
-      "change_percent": 2.5,
-      "volume": 100000000,
-      "top_stocks": ["VCB", "CTG", "BID"]
-    },
-    ...
-  ]
-}
-```
-
-### Get Stock Price
-
-**Endpoint:** `GET /api/v1/market/stock/{symbol}/price`
-
-**Query Parameters:**
-- `start_date` (required): YYYY-MM-DD
-- `end_date` (required): YYYY-MM-DD
-
-**Example:** `GET /api/v1/market/stock/VNM/price?start_date=2024-01-01&end_date=2024-12-31`
-
-**Response:**
+**Query params:** `start_date` (YYYY-MM-DD, optional), `end_date` (YYYY-MM-DD, optional)
 ```json
 {
   "symbol": "VNM",
-  "data": [
-    {
-      "date": "2024-01-01",
-      "open": 85000,
-      "high": 86000,
-      "low": 84000,
-      "close": 85500,
-      "volume": 1000000
-    },
-    ...
-  ],
-  "from_cache": true,
-  "cached_at": "2024-12-31T10:00:00Z"
+  "start_date": "2024-01-01",
+  "end_date": "2024-12-31",
+  "data": {
+    "2024-01-01": { "open": 85000, "high": 86000, "low": 84000, "close": 85500, "volume": 1000000 }
+  },
+  "cached": true
 }
 ```
 
-### Get Stock Info
-
-**Endpoint:** `GET /api/v1/market/stock/{symbol}/info`
-
-**Response:**
-```json
-{
-  "symbol": "VNM",
-  "name": "Vinamilk",
-  "exchange": "HOSE",
-  "industry": "Food & Beverage",
-  "current_price": 85000,
-  "market_cap": 100000000000000,
-  "shares_outstanding": 1176000000,
-  "from_cache": true
-}
-```
-
-### Get Stock Fundamentals
-
-**Endpoint:** `GET /api/v1/market/stock/{symbol}/fundamentals`
-
-**Response:**
+### GET `/stock/{symbol}/fundamentals`
 ```json
 {
   "symbol": "VNM",
@@ -270,441 +273,200 @@ All market endpoints require authentication.
   "roe": 0.25,
   "roa": 0.15,
   "eps": 5500,
-  "bvps": 26500,
-  "debt_to_equity": 0.3,
-  "from_cache": true,
-  "cached_at": "2024-12-31T00:00:00Z"
+  "debt_to_equity": 0.3
 }
 ```
 
-### Get Market News
+### GET `/news`
 
-**Endpoint:** `GET /api/v1/market/news`
-
-**Query Parameters:**
-- `limit` (optional, default: 10): Number of articles
-- `offset` (optional, default: 0): Pagination offset
-
-**Response:**
+**Query params:** `limit` (1-100, default 20), `category` (optional)
 ```json
-{
-  "articles": [
-    {
-      "title": "Market closes higher on strong banking sector",
-      "description": "VN-Index gained 1.5% today...",
-      "url": "https://...",
-      "published_at": "2024-12-31T17:00:00Z",
-      "source": "VnExpress"
-    },
-    ...
-  ],
-  "total": 100,
-  "limit": 10,
-  "offset": 0
-}
+[
+  {
+    "title": "Thị trường tăng điểm mạnh",
+    "summary": "...",
+    "url": "https://...",
+    "source": "VnExpress",
+    "published_at": "2024-12-31T17:00:00Z",
+    "symbols": ["VCB", "CTG"],
+    "category": "market"
+  }
+]
 ```
 
-### Search Stocks
+### GET `/search`
 
-**Endpoint:** `GET /api/v1/market/search`
+**Query params:** `query` (required), `limit` (1-50, default 10)
 
-**Query Parameters:**
-- `query` (required): Search term (symbol or name)
-- `limit` (optional, default: 10): Max results
-
-**Example:** `GET /api/v1/market/search?query=vinamilk&limit=5`
-
-**Response:**
+**Ví dụ:** `/search?query=vinamilk&limit=5`
 ```json
-{
-  "results": [
-    {
-      "symbol": "VNM",
-      "name": "Vinamilk",
-      "exchange": "HOSE",
-      "industry": "Food & Beverage"
-    }
-  ],
-  "total": 1
-}
+[{ "symbol": "VNM", "name": "Vinamilk", "exchange": "HOSE", "industry": "Food & Beverage" }]
 ```
 
-### Clear Market Cache
+### POST `/cache/clear`
 
-**Endpoint:** `POST /api/v1/market/cache/clear`
-
-**Headers:** `Authorization: Bearer {access_token}` (admin only)
-
-**Response:**
+**Query params:** `cache_type` (optional: `price` | `fundamentals` | bỏ trống = clear all)
 ```json
-{
-  "message": "Cache cleared successfully",
-  "rows_deleted": 150
-}
+{ "message": "Cache cleared successfully", "cache_type": "all" }
 ```
+
+> ⚠️ Lưu ý: endpoint này chưa có phân quyền admin, bất kỳ user đã đăng nhập nào cũng có thể gọi.
 
 ---
 
-## Portfolio API
+## Optimization
 
-### List Portfolios
+**Prefix:** `/api/v1/optimize` | Tất cả endpoint yêu cầu auth ✅
 
-**Endpoint:** `GET /api/v1/portfolios`
+### Optimization Runs
 
-**Query Parameters:**
-- `skip` (optional, default: 0): Pagination offset
-- `limit` (optional, default: 10): Max results
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `/run` | Chạy tối ưu hoá danh mục |
+| GET | `/runs` | Lịch sử runs (`?portfolio_id=&model_type=&skip=0&limit=50`) |
+| GET | `/runs/{run_id}` | Chi tiết run |
+| DELETE | `/runs/{run_id}` | Xóa run |
+| GET | `/models` | Danh sách mô hình hỗ trợ |
 
-**Response:**
+### POST `/run`
 ```json
+// Request
 {
-  "portfolios": [
-    {
-      "id": 1,
-      "name": "My Portfolio",
-      "description": "Long-term investment",
-      "total_investment": 100000000,
-      "created_at": "2024-01-01T00:00:00Z",
-      "stocks_count": 5
-    },
-    ...
-  ],
-  "total": 3
+  "symbols": ["VCB", "FPT", "VNM", "HPG", "GAS"],  // 2-50 mã
+  "model": "Max_Sharpe",
+  "start_date": "2023-01-01",   // optional, mặc định 1 năm trước
+  "end_date": "2024-12-31",     // optional, mặc định hôm nay
+  "portfolio_id": 1,            // optional
+  "constraints": {}             // optional
 }
-```
 
-### Create Portfolio
-
-**Endpoint:** `POST /api/v1/portfolios`
-
-**Request:**
-```json
+// Response
 {
-  "name": "My New Portfolio",
-  "description": "Diversified portfolio",
-  "total_investment": 50000000
-}
-```
-
-**Response:**
-```json
-{
-  "id": 2,
-  "name": "My New Portfolio",
-  "description": "Diversified portfolio",
-  "total_investment": 50000000,
+  "optimization_id": 1,
+  "model": "Max_Sharpe",
+  "symbols": ["VCB", "FPT", "VNM", "HPG", "GAS"],
+  "weights": { "VCB": 0.25, "FPT": 0.20, "VNM": 0.20, "HPG": 0.20, "GAS": 0.15 },
+  "metrics": {
+    "expected_return": 0.18,
+    "expected_volatility": 0.12,
+    "sharpe_ratio": 1.25,
+    "cvar": -0.05,
+    "max_drawdown": -0.08
+  },
+  "efficient_frontier": {},
   "created_at": "2024-12-31T10:00:00Z"
 }
 ```
 
-### Get Portfolio Details
+**Các mô hình hỗ trợ:**
 
-**Endpoint:** `GET /api/v1/portfolios/{id}`
+| Model | Mô tả |
+|-------|-------|
+| `Markowitz` | Mean-Variance Optimization |
+| `Max_Sharpe` | Tối đa hoá Sharpe Ratio |
+| `Min_Volatility` | Tối thiểu hoá rủi ro |
+| `HRP` | Hierarchical Risk Parity |
+| `Min_CVaR` | Minimum Conditional Value at Risk |
+| `Min_CDaR` | Minimum Conditional Drawdown at Risk |
 
-**Response:**
+### Backtests
+
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `/backtest` | Chạy backtest |
+| GET | `/backtests` | Lịch sử backtests (`?optimization_id=&skip=0&limit=50`) |
+| GET | `/backtests/{backtest_id}` | Chi tiết backtest |
+| DELETE | `/backtests/{backtest_id}` | Xóa backtest |
+
+### POST `/backtest`
 ```json
+// Request
 {
-  "id": 1,
-  "name": "My Portfolio",
-  "description": "Long-term investment",
-  "total_investment": 100000000,
-  "created_at": "2024-01-01T00:00:00Z",
-  "stocks": [
-    {
-      "id": 1,
-      "symbol": "VCB",
-      "shares": 100,
-      "average_price": 85000,
-      "added_at": "2024-01-01T00:00:00Z"
-    },
-    ...
-  ]
-}
-```
-
-### Update Portfolio
-
-**Endpoint:** `PUT /api/v1/portfolios/{id}`
-
-**Request:**
-```json
-{
-  "name": "Updated Name",
-  "description": "Updated description"
-}
-```
-
-### Delete Portfolio
-
-**Endpoint:** `DELETE /api/v1/portfolios/{id}`
-
-**Response:**
-```json
-{
-  "message": "Portfolio deleted successfully"
-}
-```
-
-### Add Stock to Portfolio
-
-**Endpoint:** `POST /api/v1/portfolios/{id}/stocks`
-
-**Request:**
-```json
-{
-  "symbol": "VCB",
-  "shares": 100,
-  "average_price": 85000
-}
-```
-
-**Response:**
-```json
-{
-  "id": 1,
-  "portfolio_id": 1,
-  "symbol": "VCB",
-  "shares": 100,
-  "average_price": 85000,
-  "added_at": "2024-12-31T10:00:00Z"
-}
-```
-
-### Remove Stock from Portfolio
-
-**Endpoint:** `DELETE /api/v1/portfolios/{id}/stocks/{stock_id}`
-
-**Response:**
-```json
-{
-  "message": "Stock removed successfully"
-}
-```
-
-### Watchlist Endpoints
-
-Similar structure to portfolios:
-- `GET /api/v1/portfolios/watchlists` - List watchlists
-- `POST /api/v1/portfolios/watchlists` - Create watchlist
-- `GET /api/v1/portfolios/watchlists/{id}` - Get watchlist
-- `PUT /api/v1/portfolios/watchlists/{id}` - Update watchlist
-- `DELETE /api/v1/portfolios/watchlists/{id}` - Delete watchlist
-- `POST /api/v1/portfolios/watchlists/{id}/stocks` - Add to watchlist
-- `DELETE /api/v1/portfolios/watchlists/{id}/stocks/{symbol}` - Remove from watchlist
-
----
-
-## Optimization API
-
-### Run Optimization
-
-**Endpoint:** `POST /api/v1/optimize/run`
-
-**Request:**
-```json
-{
-  "symbols": ["VCB", "FPT", "VNM", "HPG", "GAS"],
-  "method": "max_sharpe",
-  "total_investment": 100000000,
-  "start_date": "2023-01-01",
-  "end_date": "2024-12-31",
-  "risk_free_rate": 0.03
-}
-```
-
-**Available methods:**
-- `markowitz` - Mean-Variance Optimization
-- `max_sharpe` - Maximum Sharpe Ratio
-- `min_volatility` - Minimum Volatility
-- `hrp` - Hierarchical Risk Parity
-- `min_cvar` - Minimum CVaR
-- `min_cdar` - Minimum CDaR
-
-**Response:**
-```json
-{
-  "id": 1,
-  "symbols": ["VCB", "FPT", "VNM", "HPG", "GAS"],
-  "method": "max_sharpe",
-  "weights": {
-    "VCB": 0.25,
-    "FPT": 0.20,
-    "VNM": 0.20,
-    "HPG": 0.20,
-    "GAS": 0.15
-  },
-  "allocation": {
-    "VCB": 25000000,
-    "FPT": 20000000,
-    "VNM": 20000000,
-    "HPG": 20000000,
-    "GAS": 15000000
-  },
-  "expected_return": 0.18,
-  "volatility": 0.12,
-  "sharpe_ratio": 1.25,
-  "status": "completed",
-  "created_at": "2024-12-31T10:00:00Z"
-}
-```
-
-### Get Optimization History
-
-**Endpoint:** `GET /api/v1/optimize/runs`
-
-**Query Parameters:**
-- `skip` (optional): Pagination offset
-- `limit` (optional): Max results
-
-**Response:**
-```json
-{
-  "runs": [
-    {
-      "id": 1,
-      "method": "max_sharpe",
-      "symbols": ["VCB", "FPT", "VNM"],
-      "sharpe_ratio": 1.25,
-      "created_at": "2024-12-31T10:00:00Z"
-    },
-    ...
-  ],
-  "total": 10
-}
-```
-
-### Get Optimization Details
-
-**Endpoint:** `GET /api/v1/optimize/runs/{id}`
-
-**Response:** Same as run optimization response
-
-### Delete Optimization Run
-
-**Endpoint:** `DELETE /api/v1/optimize/runs/{id}`
-
-### Run Backtest
-
-**Endpoint:** `POST /api/v1/optimize/backtest`
-
-**Request:**
-```json
-{
-  "optimization_run_id": 1,
+  "optimization_id": 1,           // optional nếu cung cấp weights + symbols
+  "weights": { "VCB": 0.5, "FPT": 0.5 },  // required nếu không có optimization_id
+  "symbols": ["VCB", "FPT"],      // required nếu không có optimization_id
   "start_date": "2024-01-01",
   "end_date": "2024-12-31",
-  "initial_investment": 100000000,
-  "rebalance_frequency": "monthly"
+  "initial_capital": 100000000,
+  "rebalance_frequency": "monthly"  // daily | weekly | monthly
 }
-```
 
-**Response:**
-```json
+// Response
 {
-  "id": 1,
-  "optimization_run_id": 1,
-  "start_date": "2024-01-01",
-  "end_date": "2024-12-31",
-  "initial_investment": 100000000,
-  "final_value": 118000000,
-  "total_return": 0.18,
-  "annual_return": 0.18,
-  "volatility": 0.12,
-  "sharpe_ratio": 1.25,
-  "max_drawdown": -0.08,
-  "portfolio_value_history": {
-    "2024-01-01": 100000000,
-    "2024-02-01": 102000000,
-    ...
+  "backtest_id": 1,
+  "optimization_id": 1,
+  "symbols": ["VCB", "FPT"],
+  "weights": { "VCB": 0.5, "FPT": 0.5 },
+  "performance": {
+    "initial_capital": 100000000,
+    "final_value": 118000000,
+    "total_return": 0.18,
+    "annualized_return": 0.18,
+    "volatility": 0.12,
+    "sharpe_ratio": 1.25,
+    "max_drawdown": -0.08,
+    "win_rate": 0.62
   },
+  "equity_curve": {},
+  "drawdown_curve": {},
   "created_at": "2024-12-31T11:00:00Z"
 }
 ```
 
-### Get Available Models
-
-**Endpoint:** `GET /api/v1/optimize/models`
-
-**Response:**
-```json
-{
-  "models": [
-    {
-      "name": "max_sharpe",
-      "display_name": "Maximum Sharpe Ratio",
-      "description": "Maximizes risk-adjusted returns"
-    },
-    {
-      "name": "min_volatility",
-      "display_name": "Minimum Volatility",
-      "description": "Minimizes portfolio risk"
-    },
-    ...
-  ]
-}
-```
-
 ---
 
-## Chatbot API
+## Chatbot
 
-### Send Message
+**Prefix:** `/api/v1/chat` | Tất cả endpoint yêu cầu auth ✅
+**Powered by:** Google Gemini API
 
-**Endpoint:** `POST /api/v1/chat/message`
+| Method | Path | Mô tả |
+|--------|------|-------|
+| POST | `/message` | Gửi tin nhắn tới AI |
+| GET | `/conversations` | Lịch sử hội thoại (`?skip=0&limit=50`) |
+| GET | `/conversations/{conversation_id}` | Chi tiết hội thoại |
+| DELETE | `/conversations/{conversation_id}` | Xóa hội thoại |
+| POST | `/feedback` | Đánh giá response |
+| GET | `/suggestions` | Gợi ý câu hỏi |
 
-**Request:**
+### POST `/message`
 ```json
+// Request
 {
-  "message": "What are the top performing stocks today?",
-  "context": {
-    "portfolio_id": 1,
-    "include_market_data": true
-  }
+  "message": "Hôm nay cổ phiếu nào tăng mạnh nhất?",
+  "conversation_id": "abc123",        // optional - tiếp tục hội thoại cũ
+  "context": {},                      // optional
+  "include_portfolio_context": false  // true = đưa data portfolio vào context
 }
-```
 
-**Response:**
-```json
+// Response
 {
-  "response": "Based on today's market data, the top performing stocks are...",
+  "message": "Dựa trên dữ liệu thị trường hôm nay...",
   "conversation_id": "abc123",
-  "timestamp": "2024-12-31T10:00:00Z",
-  "metadata": {
-    "model": "gemini-pro",
-    "tokens_used": 150
-  }
+  "sources": [],
+  "suggested_actions": ["Xem chi tiết VCB", "Chạy optimization"],
+  "timestamp": "2024-12-31T10:00:00Z"
 }
 ```
 
-### Get Suggestions
+### POST `/feedback`
 
-**Endpoint:** `GET /api/v1/chat/suggestions`
+**Query params:** `conversation_id`, `message_id`, `rating` (1-5), `feedback` (optional text)
 
-**Query Parameters:**
-- `portfolio_id` (optional): Get suggestions based on portfolio
+> ⚠️ Lưu ý: endpoint này dùng query params thay vì request body — không nhất quán với các endpoint khác.
 
-**Response:**
+```json
+{ "message": "Feedback submitted", "conversation_id": "abc123", "message_id": "msg1" }
+```
+
+### GET `/suggestions`
 ```json
 {
   "suggestions": [
-    "Analyze my portfolio performance",
-    "What stocks should I buy today?",
-    "Compare VCB and CTG",
-    "What's the market sentiment?"
+    { "category": "Market", "questions": ["Tổng quan thị trường hôm nay?", "Cổ phiếu nào đang tăng mạnh?"] },
+    { "category": "Portfolio", "questions": ["Phân tích danh mục của tôi", "Gợi ý tái cân bằng danh mục"] },
+    { "category": "Optimization", "questions": ["Tối ưu danh mục với VCB, FPT, VNM", "So sánh các mô hình tối ưu"] }
   ]
-}
-```
-
-### Submit Feedback
-
-**Endpoint:** `POST /api/v1/chat/feedback`
-
-**Request:**
-```json
-{
-  "conversation_id": "abc123",
-  "rating": 5,
-  "comment": "Very helpful response"
 }
 ```
 
@@ -712,248 +474,109 @@ Similar structure to portfolios:
 
 ## Testing Guide
 
-### 1. Setup Test Environment
+### Chạy test thủ công
 
 ```bash
-cd backend-api
-
-# Install dependencies
-pip install -r requirements.txt
-pip install pytest pytest-asyncio httpx
-
-# Configure test database
-cp .env.example .env.test
-# Edit .env.test with test database credentials
-```
-
-### 2. Run Manual Test Script
-
-```bash
-# Start server
+# Khởi động server
 python run.py
 
-# In another terminal
+# Mở terminal khác
 python test_manual.py
 ```
 
-**test_manual.py** includes 13 test scenarios:
-1. Health check
-2. Root endpoint
-3. API info
-4. User registration
-5. User login
-6. Market indices
-7. Market overview
-8. Sector performance
-9. Stock price data
-10. Stock info
-11. Stock fundamentals
-12. Stock search
-13. Market news
+`test_manual.py` test 13 endpoints: health, root, info, register, login, market indices, overview, sectors, stock price, stock info, fundamentals, search, news.
 
-### 3. Pytest (Unit Tests)
+### cURL examples
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test file
-pytest tests/test_market_api.py -v
-
-# Run with coverage
-pytest --cov=app --cov-report=html
-
-# View coverage report
-open htmlcov/index.html
-```
-
-**Example test file:**
-```python
-# tests/test_market_api.py
-import pytest
-from fastapi.testclient import TestClient
-from app.main import app
-
-client = TestClient(app)
-
-def test_health_check():
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
-
-def test_market_indices_requires_auth():
-    response = client.get("/api/v1/market/indices")
-    assert response.status_code == 401
-
-def test_market_indices_with_auth(auth_headers):
-    response = client.get(
-        "/api/v1/market/indices",
-        headers=auth_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "vnindex" in data
-```
-
-### 4. Test with cURL
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Register user
+# Đăng ký
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username": "test", "email": "test@test.com", "password": "test123", "full_name": "Test User"}'
+  -d '{"username": "test", "email": "test@test.com", "password": "test1234", "full_name": "Test"}'
 
-# Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
+# Đăng nhập và lưu token
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "test", "password": "test123"}'
+  -d '{"username": "test", "password": "test1234"}' | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# Save token
-TOKEN="your_access_token_here"
-
-# Get market indices
+# Lấy chỉ số thị trường
 curl http://localhost:8000/api/v1/market/indices \
   -H "Authorization: Bearer $TOKEN"
 
-# Get stock price
-curl "http://localhost:8000/api/v1/market/stock/VNM/price?start_date=2024-01-01&end_date=2024-12-31" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Run optimization
+# Tối ưu danh mục
 curl -X POST http://localhost:8000/api/v1/optimize/run \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "symbols": ["VCB", "FPT", "VNM"],
-    "method": "max_sharpe",
-    "total_investment": 100000000,
-    "start_date": "2023-01-01",
-    "end_date": "2024-12-31"
-  }'
+  -d '{"symbols": ["VCB", "FPT", "VNM"], "model": "Max_Sharpe", "start_date": "2023-01-01", "end_date": "2024-12-31"}'
 ```
 
-### 5. Test with Python requests
+### Python requests
 
 ```python
 import requests
 
 BASE_URL = "http://localhost:8000/api/v1"
 
-# Login
-login_response = requests.post(
-    f"{BASE_URL}/auth/login",
-    json={"username": "test", "password": "test123"}
-)
-token = login_response.json()["access_token"]
-
-# Set headers
+# Đăng nhập
+res = requests.post(f"{BASE_URL}/auth/login", json={"username": "test", "password": "test1234"})
+token = res.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 
-# Get market indices
-indices = requests.get(f"{BASE_URL}/market/indices", headers=headers)
-print(indices.json())
+# Tối ưu danh mục
+res = requests.post(f"{BASE_URL}/optimize/run", headers=headers, json={
+    "symbols": ["VCB", "FPT", "VNM", "HPG"],
+    "model": "Max_Sharpe",
+    "start_date": "2023-01-01",
+    "end_date": "2024-12-31"
+})
+print(res.json())
+```
 
-# Run optimization
-optimization = requests.post(
-    f"{BASE_URL}/optimize/run",
-    headers=headers,
-    json={
-        "symbols": ["VCB", "FPT", "VNM"],
-        "method": "max_sharpe",
-        "total_investment": 100000000,
-        "start_date": "2023-01-01",
-        "end_date": "2024-12-31"
-    }
-)
-print(optimization.json())
+### Pytest
+
+```bash
+pip install pytest pytest-asyncio httpx
+
+pytest tests/ -v
+pytest tests/ --cov=app --cov-report=html
 ```
 
 ---
 
 ## Deployment
 
-### Option 1: Railway
+### Railway
 
-**1. Setup:**
 ```bash
-# Install Railway CLI
 npm install -g @railway/cli
-
-# Login
-railway login
-
-# Initialize project
-railway init
-```
-
-**2. Configure:**
-```bash
-# Add PostgreSQL
+railway login && railway init
 railway add --plugin postgresql
-
-# Set environment variables
-railway variables set SECRET_KEY=your-secret-key
-railway variables set GEMINI_API_KEY=your-api-key
-```
-
-**3. Deploy:**
-```bash
+railway variables set SECRET_KEY=... GEMINI_API_KEY=...
 railway up
-```
-
-**4. Run migrations:**
-```bash
 railway run alembic upgrade head
 ```
 
-### Option 2: Render
+### Render
 
-**1. Create Web Service:**
-- Connect GitHub repository
-- Select `backend-api` directory
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Thêm PostgreSQL database, copy `DATABASE_URL` vào env vars
+- Sau deploy: vào Render Shell chạy `alembic upgrade head`
 
-**2. Add PostgreSQL:**
-- Create PostgreSQL database
-- Copy internal database URL to environment variables
+### Docker
 
-**3. Environment Variables:**
-```
-DATABASE_URL=<from Render PostgreSQL>
-SECRET_KEY=<generate new>
-GEMINI_API_KEY=<your key>
-```
-
-**4. Run migrations:**
-```bash
-# In Render shell
-alembic upgrade head
-```
-
-### Option 3: Docker
-
-**Dockerfile:**
 ```dockerfile
 FROM python:3.11-slim
-
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
-
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**docker-compose.yml:**
 ```yaml
+# docker-compose.yml
 version: '3.8'
-
 services:
   db:
     image: postgres:15
@@ -963,8 +586,6 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
   api:
     build: .
@@ -981,163 +602,21 @@ volumes:
   postgres_data:
 ```
 
-**Deploy:**
 ```bash
-# Build and run
 docker-compose up -d
-
-# Run migrations
 docker-compose exec api alembic upgrade head
-
-# View logs
 docker-compose logs -f api
-```
-
----
-
-## Supabase Setup
-
-### 1. Create Project
-
-1. Truy cập [supabase.com](https://supabase.com)
-2. Click "New Project"
-3. Điền thông tin:
-   - **Name:** portfolio-optimization
-   - **Password:** Tạo mật khẩu mạnh
-   - **Region:** Singapore
-4. Click "Create Project"
-
-### 2. Get Credentials
-
-Vào **Project Settings** → **API**:
-```
-Project URL: https://xxxxxxxxxxxxx.supabase.co
-anon public key: eyJhbGc...
-service_role key: eyJhbGc...
-```
-
-### 3. Configure Backend
-
-Update `.env`:
-```env
-USE_SUPABASE=True
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-key
-```
-
-### 4. Create Schema
-
-Vào **SQL Editor** và run:
-```sql
--- Create tables
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(100) UNIQUE,
-    hashed_password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create portfolios
-CREATE TABLE portfolios (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    total_investment NUMERIC(15, 2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create indexes
-CREATE INDEX idx_portfolios_user_id ON portfolios(user_id);
-
--- Enable Row Level Security
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
-
--- Create policies
-CREATE POLICY "Users can view their own data" ON users
-    FOR SELECT USING (auth.uid() = id);
-
-CREATE POLICY "Users can view their own portfolios" ON portfolios
-    FOR SELECT USING (auth.uid() = user_id);
-```
-
-### 5. Test Connection
-
-```python
-from app.supabase_client import supabase
-
-client = supabase()
-result = client.table("portfolios").select("*").limit(1).execute()
-print(result.data)
 ```
 
 ---
 
 ## Production Checklist
 
-### Security
-- [ ] Change SECRET_KEY to strong random value
-- [ ] Use HTTPS only
-- [ ] Enable CORS with specific origins
-- [ ] Set up rate limiting
-- [ ] Enable database backups
-- [ ] Rotate API keys regularly
-
-### Performance
-- [ ] Enable Redis caching
-- [ ] Set up connection pooling
-- [ ] Configure proper indexes
-- [ ] Monitor query performance
-- [ ] Set up CDN for static assets
-
-### Monitoring
-- [ ] Set up error tracking (Sentry)
-- [ ] Configure logging (CloudWatch/DataDog)
-- [ ] Set up uptime monitoring
-- [ ] Configure alerts for errors
-- [ ] Monitor API response times
-
-### Documentation
-- [ ] API documentation is up-to-date
-- [ ] Environment variables documented
-- [ ] Deployment process documented
-- [ ] Backup/restore procedures documented
-
----
-
-## Support
-
-### Common Issues
-
-**Issue: Database connection error**
-- Check DATABASE_URL in .env
-- Verify PostgreSQL is running
-- Check firewall/security groups
-
-**Issue: Authentication fails**
-- Verify SECRET_KEY is set
-- Check token expiration settings
-- Ensure user exists in database
-
-**Issue: Market data not loading**
-- Check vnstock API is accessible
-- Verify cache is working
-- Check network connectivity
-
-### Resources
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [vnstock API](https://github.com/thinh-vu/vnstock)
-- [Supabase Documentation](https://supabase.com/docs)
-
-### Contact
-
-- Report bugs: GitHub Issues
-- Feature requests: GitHub Discussions
-- Email: support@example.com
+- [ ] Đổi `SECRET_KEY` thành giá trị ngẫu nhiên mạnh (`openssl rand -hex 32`)
+- [ ] Bật HTTPS
+- [ ] Giới hạn CORS origins cụ thể trong `.env`
+- [ ] Thêm rate limiting
+- [ ] Phân quyền admin cho `POST /market/cache/clear`
+- [ ] Bật Redis caching (cấu hình `REDIS_URL`)
+- [ ] Thiết lập backup database định kỳ
+- [ ] Cấu hình monitoring (Sentry, logging)

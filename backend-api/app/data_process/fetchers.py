@@ -296,19 +296,24 @@ def get_index_history(symbol: str = "VNINDEX", start_date: Optional[str] = None,
 
 @lru_cache(maxsize=1)
 def _load_company_info_mapping() -> Dict[str, str]:
-    """Load symbol -> industry mapping from local CSV."""
+    """Load symbol -> industry mapping from database."""
     mapping = {}
     try:
-        csv_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'company_info.csv')
-        if os.path.exists(csv_path):
-            df = pd.read_csv(csv_path)
-            # Normalize column names
-            df.columns = [c.lower() for c in df.columns]
-            if 'symbol' in df.columns and 'icb_name' in df.columns:
-                df['symbol'] = df['symbol'].astype(str).str.upper().str.strip()
-                mapping = dict(zip(df['symbol'], df['icb_name']))
+        from app.database import SessionLocal
+        from app.models.company_info import CompanyInfo
+
+        db = SessionLocal()
+        try:
+            rows = db.query(CompanyInfo.symbol, CompanyInfo.icb_name).all()
+            mapping = {
+                row.symbol.upper().strip(): row.icb_name
+                for row in rows
+                if row.icb_name
+            }
+        finally:
+            db.close()
     except Exception as e:
-        print(f"Error loading company info: {e}")
+        print(f"Error loading company info from database: {e}")
     return mapping
 
 
