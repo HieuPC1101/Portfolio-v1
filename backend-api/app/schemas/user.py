@@ -11,6 +11,7 @@ from datetime import datetime
 class UserBase(BaseModel):
     """Base user schema."""
 
+    username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     full_name: Optional[str] = None
 
@@ -24,13 +25,14 @@ class UserCreate(UserBase):
 class UserLogin(BaseModel):
     """Schema for user login."""
 
-    email: EmailStr
+    username: str
     password: str
 
 
 class UserUpdate(BaseModel):
     """Schema for updating user profile."""
 
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
 
@@ -65,7 +67,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     """Data stored in JWT token."""
 
-    user_id: Optional[int] = None
+    username: Optional[str] = None
     email: Optional[str] = None
 
 
@@ -82,6 +84,8 @@ class UserSettingsBase(BaseModel):
     default_investment: Optional[float] = 1000000
     preferred_market: Optional[str] = "HOSE"
     risk_tolerance: Optional[str] = "moderate"  # conservative, moderate, aggressive
+    investment_horizon: Optional[str] = None
+    preferred_sectors: Optional[list[str]] = None
     notifications_enabled: Optional[bool] = True
     theme: Optional[str] = "light"
 

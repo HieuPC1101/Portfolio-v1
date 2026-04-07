@@ -1,245 +1,194 @@
-"""
-Chatbot Service - Xử lý logic AI chatbot cho ứng dụng danh mục đầu tư.
-Sử dụng Google Gemini API (miễn phí)
-"""
+"""Chatbot service built on Google Gemini."""
+
+from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
+
 import google.generativeai as genai
-from chatbot.market_data_adapter import get_market_data_adapter
-from utils.secrets import load_gemini_api_key
+
+from app.chatbot.market_data_adapter import get_market_data_adapter
+from app.config import settings
 
 
 class PortfolioChatbot:
-    """Lớp xử lý chatbot hỗ trợ tư vấn danh mục đầu tư"""
-    
-    def __init__(self, api_key):
-        """
-        Khởi tạo chatbot với Google Gemini API key
-        
-        Args:
-            api_key (str): Google Gemini API key
-        """
-        self.api_key = api_key
-        genai.configure(api_key=api_key)
-        
-        # Cấu hình safety settings
-        self.safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_NONE"
-            }
-        ]
-        
-        # Sử dụng Gemini Flash Latest với safety settings
-        self.model = genai.GenerativeModel(
-            'gemini-flash-latest',
-            safety_settings=self.safety_settings
-        )
-        self.conversation_history = []
-        
-        # Sử dụng MarketDataAdapter để lấy dữ liệu thị trường
-        self.market_data = get_market_data_adapter()
-        
-    def get_system_prompt(self, portfolio_data=None):
-        """
-        Tạo system prompt cho chatbot với thông tin về danh mục
-        
-        Args:
-            portfolio_data (dict): Dữ liệu danh mục đầu tư hiện tại
-            
-        Returns:
-            str: System prompt
-        """
-        base_prompt = (
-     "Bạn là một trợ lý AI chuyên về tư vấn đầu tư chứng khoán tại thị trường Việt Nam.\n\n"
-    "**Nhiệm vụ chính:**\n"
-    "- Tư vấn chiến lược đầu tư (ngắn hạn, trung hạn, dài hạn).\n"
-    "- Giải thích các chỉ số tài chính và phương pháp định giá doanh nghiệp.\n"
-    "- Phân tích các rủi ro (thị trường, ngành, cổ phiếu cụ thể).\n"
-    "- Tối ưu hóa danh mục đầu tư dựa trên các tiêu chí người dùng cung cấp như khẩu vị rủi ro, mục tiêu lợi nhuận, và thời gian đầu tư.\n\n"
-    "**Nguyên tắc hoạt động:**\n"
-    "1.  **Dựa trên dữ liệu:** Luôn phân tích dựa trên dữ liệu thực tế, cập nhật. Ưu tiên sử dụng thông tin từ báo cáo tài chính của công ty, dữ liệu giao dịch và các nguồn tin tài chính uy tín tại Việt Nam.\n"
-    "2.  **Cụ thể và rõ ràng:** Đưa ra lời khuyên cụ thể, có luận điểm. Giải thích các thuật ngữ và phương pháp phân tích một cách đơn giản, dễ hiểu.\n"
-    "3.  **Cá nhân hóa:** Nếu người dùng cung cấp thông tin về danh mục đầu tư hiện tại, hãy sử dụng thông tin đó làm cơ sở để đưa ra các đề xuất tối ưu và phù hợp nhất.\n\n"
-    "**Định dạng trả lời:**\n"
-    "- Sử dụng tiếng Việt, văn phong ngắn gọn, đi thẳng vào vấn đề, không bỏ sót câu trả lời.\n"
-    "- Ưu tiên các giải pháp và hành động mang tính thực tiễn.\n"
-    "- Trả lời ngắn gọn, đúng trọng tâm, không lan man dài dòng.\n"
-)
+    """Chatbot service for portfolio advisory use-cases."""
 
+    def __init__(self, user_id: Optional[int] = None, api_key: Optional[str] = None):
+        self.user_id = user_id
+        self.api_key = api_key or settings.gemini_api_key
+        self.market_data = get_market_data_adapter()
+        self.conversation_history: Dict[str, List[Dict[str, Any]]] = {}
+
+        self.safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+
+        self.model = None
+        if self.api_key:
+            genai.configure(api_key=self.api_key)
+            self.model = genai.GenerativeModel(
+                "gemini-flash-latest",
+                safety_settings=self.safety_settings,
+            )
+
+    def get_system_prompt(self, portfolio_data: Optional[dict] = None) -> str:
+        """Build system prompt with optional user context."""
+        base_prompt = (
+            "Bạn là một trợ lý AI tư vấn đầu tư chứng khoán Việt Nam. "
+            "Trả lời ngắn gọn, thực tế, có cảnh báo rủi ro khi cần."
+        )
         if portfolio_data:
-            base_prompt += f"\n\nThông tin danh mục:\n{portfolio_data}"
-            
+            base_prompt += f"\n\nNgữ cảnh người dùng: {portfolio_data}"
         return base_prompt
-    
-    def add_message_to_history(self, role, content):
-        """
-        Thêm tin nhắn vào lịch sử hội thoại
-        
-        Args:
-            role (str): 'user' hoặc 'assistant'
-            content (str): Nội dung tin nhắn
-        """
-        self.conversation_history.append({
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now()
-        })
-        
-        # Giới hạn lịch sử chỉ giữ 10 tin nhắn gần nhất để tránh vượt token limit
-        if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
-    
-    def generate_response(self, user_message, portfolio_context=None):
-        """
-        Sinh câu trả lời từ chatbot sử dụng Google Gemini
-        
-        Args:
-            user_message (str): Câu hỏi từ người dùng
-            portfolio_context (dict): Thông tin context về danh mục
-            
-        Returns:
-            str: Câu trả lời từ chatbot
-        """
+
+    def _history_for(self, conversation_id: str) -> List[Dict[str, Any]]:
+        return self.conversation_history.setdefault(conversation_id, [])
+
+    def add_message_to_history(
+        self, role: str, content: str, conversation_id: str
+    ) -> None:
+        """Append message to a specific conversation history."""
+        history = self._history_for(conversation_id)
+        history.append(
+            {
+                "role": role,
+                "content": content,
+                "timestamp": datetime.utcnow(),
+            }
+        )
+        if len(history) > 10:
+            self.conversation_history[conversation_id] = history[-10:]
+
+    def generate_response(
+        self,
+        user_message: str,
+        portfolio_context: Optional[dict] = None,
+        conversation_id: str = "default",
+    ) -> str:
+        """Generate assistant response text."""
+        if self.model is None:
+            return (
+                "Gemini API key chưa được cấu hình. Vui lòng kiểm tra GEMINI_API_KEY."
+            )
+
         try:
-            # Thêm tin nhắn của user vào lịch sử
-            self.add_message_to_history("user", user_message)
-            
-            # Lấy market data context từ adapter
+            self.add_message_to_history("user", user_message, conversation_id)
+            history = self._history_for(conversation_id)
+
             market_context = self.market_data.get_context_from_query(user_message)
-            
-            # Tạo prompt đầy đủ với system prompt và context
             full_prompt = self.get_system_prompt(portfolio_context) + "\n\n"
-            
-            # Thêm market data context nếu có
+
             if market_context:
-                full_prompt += f"\n{market_context}\n\n"
-            
-            # Thêm lịch sử hội thoại
-            for msg in self.conversation_history[-6:]:  # Chỉ lấy 6 tin nhắn gần nhất
-                role_label = "Người dùng" if msg["role"] == "user" else "Trợ lý"
-                full_prompt += f"{role_label}: {msg['content']}\n\n"
-            
-            # Debug: In ra để kiểm tra
-            print(f" Sending prompt to Gemini API...")
-            
-            # Gọi Google Gemini API
+                full_prompt += f"Dữ liệu thị trường liên quan:\n{market_context}\n\n"
+
+            for message in history[-6:]:
+                role_label = "Người dùng" if message["role"] == "user" else "Trợ lý"
+                full_prompt += f"{role_label}: {message['content']}\n"
+
             response = self.model.generate_content(
                 full_prompt,
                 generation_config={
-                    'temperature': 0.7,
-                    'top_p': 0.95,
-                    'top_k': 40,
-                    'max_output_tokens': 2048,
-                }
+                    "temperature": 0.7,
+                    "top_p": 0.95,
+                    "top_k": 40,
+                    "max_output_tokens": 2048,
+                },
             )
-            
-            print(f"Received response from Gemini API")
-            
-            # Kiểm tra response có bị block không
-            if hasattr(response, 'prompt_feedback') and hasattr(response.prompt_feedback, 'block_reason'):
-                if response.prompt_feedback.block_reason:
-                    error_msg = f"Câu hỏi bị chặn do: {response.prompt_feedback.block_reason}. Vui lòng thử câu hỏi khác."
-                    print(f" Blocked: {error_msg}")
-                    return error_msg
-            
-            # Kiểm tra response có parts không
-            if not response or not hasattr(response, 'parts') or not response.parts:
-                error_msg = "Xin lỗi, tôi không nhận được phản hồi từ AI. Vui lòng thử lại."
-                print(f" No parts in response")
-                return error_msg
-            
-            # Lấy text từ response
-            try:
-                assistant_message = response.text
-                print(f" Got response text: {len(assistant_message)} chars")
-            except Exception as text_error:
-                error_msg = f"Xin lỗi, không thể đọc phản hồi: {str(text_error)}. Vui lòng thử lại."
-                print(f" Error getting text: {text_error}")
-                return error_msg
-            
-            # Kiểm tra message có nội dung không
-            if not assistant_message or assistant_message.strip() == "":
-                error_msg = "Xin lỗi, câu trả lời trống. Vui lòng thử câu hỏi khác."
-                print(f" Empty response")
-                return error_msg
-            
-            # Thêm response vào lịch sử
-            self.add_message_to_history("assistant", assistant_message)
-            
+
+            assistant_message = getattr(response, "text", None)
+            if not assistant_message:
+                return "Xin lỗi, tôi không nhận được phản hồi từ AI."
+
+            self.add_message_to_history("assistant", assistant_message, conversation_id)
             return assistant_message
-            
-        except AttributeError as e:
-            # Lỗi khi response không có text
-            return "Xin lỗi, không thể lấy câu trả lời. Vui lòng thử câu hỏi khác."
-        except Exception as e:
-            error_message = f"Xin lỗi, đã có lỗi xảy ra: {str(e)}"
-            if "API" in str(e) or "key" in str(e).lower():
-                error_message = "Vui lòng kiểm tra GEMINI_API_KEY trong file config.py"
-            return error_message
-    
-    def clear_history(self):
-        """Xóa lịch sử hội thoại"""
-        self.conversation_history = []
-    
-    def get_portfolio_context(self, selected_stocks=None, optimization_result=None):
-        """
-        Tạo context về danh mục đầu tư hiện tại
-        
-        Args:
-            selected_stocks (list): Danh sách mã cổ phiếu đã chọn
-            optimization_result (dict): Kết quả tối ưu hóa danh mục
-            
-        Returns:
-            str: Thông tin context dạng text
-        """
-        context_parts = []
-        
+        except Exception as exc:
+            return f"Xin lỗi, đã có lỗi xảy ra: {exc}"
+
+    def chat(
+        self,
+        message: str,
+        conversation_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """High-level chat method used by API layer."""
+        resolved_conversation_id = conversation_id or str(uuid4())
+        response_text = self.generate_response(
+            user_message=message,
+            portfolio_context=context,
+            conversation_id=resolved_conversation_id,
+        )
+
+        return {
+            "response": response_text,
+            "conversation_id": resolved_conversation_id,
+            "sources": [],
+            "suggested_actions": [],
+            "timestamp": datetime.utcnow(),
+        }
+
+    def clear_history(self, conversation_id: Optional[str] = None) -> None:
+        """Clear all history or one conversation history."""
+        if conversation_id:
+            self.conversation_history.pop(conversation_id, None)
+            return
+        self.conversation_history = {}
+
+    def get_portfolio_context(
+        self,
+        selected_stocks: Optional[List[str]] = None,
+        optimization_result: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Create compact text context from portfolio inputs."""
+        context_parts: List[str] = []
+
         if selected_stocks:
-            context_parts.append(f"Các cổ phiếu đang xem xét: {', '.join(selected_stocks)}")
-        
+            context_parts.append(
+                f"Các cổ phiếu đang xem xét: {', '.join(selected_stocks)}"
+            )
+
         if optimization_result:
             if "Trọng số danh mục" in optimization_result:
-                weights_str = ", ".join([f"{k}: {v:.2%}" for k, v in optimization_result["Trọng số danh mục"].items()])
+                weights_str = ", ".join(
+                    [
+                        f"{k}: {v:.2%}"
+                        for k, v in optimization_result["Trọng số danh mục"].items()
+                    ]
+                )
                 context_parts.append(f"Trọng số phân bổ: {weights_str}")
-            
+
             if "Lợi nhuận kỳ vọng" in optimization_result:
-                context_parts.append(f"Lợi nhuận kỳ vọng: {optimization_result['Lợi nhuận kỳ vọng']:.2%}")
-            
+                context_parts.append(
+                    f"Lợi nhuận kỳ vọng: {optimization_result['Lợi nhuận kỳ vọng']:.2%}"
+                )
+
             if "Rủi ro (Độ lệch chuẩn)" in optimization_result:
-                context_parts.append(f"Rủi ro: {optimization_result['Rủi ro (Độ lệch chuẩn)']:.2%}")
-            
+                context_parts.append(
+                    f"Rủi ro: {optimization_result['Rủi ro (Độ lệch chuẩn)']:.2%}"
+                )
+
             if "Tỷ lệ Sharpe" in optimization_result:
-                context_parts.append(f"Sharpe Ratio: {optimization_result['Tỷ lệ Sharpe']:.4f}")
-        
+                context_parts.append(
+                    f"Sharpe Ratio: {optimization_result['Tỷ lệ Sharpe']:.4f}"
+                )
+
         return "\n".join(context_parts) if context_parts else None
 
 
-def create_quick_question_buttons():
-    """
-    Tạo các nút câu hỏi nhanh cho người dùng
-    
-    Returns:
-        list: Danh sách các câu hỏi nhanh
-    """
-    quick_questions = [
+GeminiChatbot = PortfolioChatbot
+
+
+def create_quick_question_buttons() -> List[str]:
+    """Return pre-defined quick prompts."""
+    return [
         "Phân tích mã VCB",
         "Chỉ số thị trường hôm nay",
         "Giải thích mô hình Markowitz",
         "So sánh VNM và MSN",
         "Làm sao để giảm rủi ro?",
-        "Tỷ lệ Sharpe là gì?"
+        "Tỷ lệ Sharpe là gì?",
     ]
-    return quick_questions

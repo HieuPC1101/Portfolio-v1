@@ -23,6 +23,13 @@ class PortfolioStockCreate(PortfolioStockBase):
     pass
 
 
+class PortfolioStockUpdate(BaseModel):
+    """Schema for updating stock in portfolio."""
+
+    shares: Optional[int] = Field(None, gt=0)
+    purchase_price: Optional[Decimal] = None
+
+
 class PortfolioStockResponse(PortfolioStockBase):
     """Schema for portfolio stock response."""
 

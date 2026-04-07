@@ -1,25 +1,24 @@
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.optimization import BacktestResult, OptimizationRun
+from app.models.portfolio import Portfolio, PortfolioStock
 from app.models.user import User
-from app.models.portfolio import Portfolio
-from app.models.optimization import OptimizationRun, BacktestResult
 from app.schemas.optimization import (
-    OptimizationRequest,
-    OptimizationResponse,
     BacktestRequest,
     BacktestResponse,
+    OptimizationRequest,
+    OptimizationResponse,
     OptimizationRunResponse,
 )
 from app.services.optimization_service import OptimizationService
 
 router = APIRouter(prefix="/optimize", tags=["Portfolio Optimization"])
 
-# Initialize service
 optimization_service = OptimizationService()
 
 
@@ -28,30 +27,10 @@ optimization_service = OptimizationService()
 )
 def run_optimization(
     request: OptimizationRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Run portfolio optimization.
-
-    Supports multiple optimization models:
-    - **markowitz**: Mean-Variance Optimization (Markowitz)
-    - **max_sharpe**: Maximum Sharpe Ratio
-    - **min_volatility**: Minimum Volatility
-    - **hrp**: Hierarchical Risk Parity
-    - **min_cvar**: Minimum Conditional Value at Risk
-    - **min_cdar**: Minimum Conditional Drawdown at Risk
-
-    Parameters:
-    - **portfolio_id**: Optional portfolio ID to optimize
-    - **symbols**: List of stock symbols (required if no portfolio_id)
-    - **model**: Optimization model to use
-    - **start_date**: Historical data start date
-    - **end_date**: Historical data end date
-    - **constraints**: Optional optimization constraints
-    """
-    # Verify portfolio if provided
+    """Run portfolio optimization and persist the run."""
     portfolio = None
     if request.portfolio_id:
         portfolio = (
@@ -62,18 +41,13 @@ def run_optimization(
             )
             .first()
         )
-
         if not portfolio:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
             )
 
-    # Validate symbols
     symbols = request.symbols
     if not symbols and portfolio:
-        # Get symbols from portfolio
-        from app.models.portfolio import PortfolioStock
-
         portfolio_stocks = (
             db.query(PortfolioStock)
             .filter(PortfolioStock.portfolio_id == portfolio.id)
@@ -88,88 +62,65 @@ def run_optimization(
         )
 
     try:
-        # Run optimization
         result = optimization_service.optimize_portfolio(
             symbols=symbols,
             model=request.model,
             start_date=request.start_date,
             end_date=request.end_date,
             constraints=request.constraints,
+            investment=float(request.investment),
         )
 
-        # Save optimization run to database
         optimization_run = OptimizationRun(
             user_id=current_user.id,
             portfolio_id=request.portfolio_id,
-            model_type=request.model,
-            symbols=symbols,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            weights=result.get("weights", {}),
+            model_name=str(result.get("model") or request.model),
+            input_symbols=[symbol.upper() for symbol in symbols],
+            total_investment=request.investment,
             expected_return=result.get("expected_return"),
-            expected_volatility=result.get("expected_volatility"),
+            risk_volatility=result.get("expected_volatility"),
             sharpe_ratio=result.get("sharpe_ratio"),
-            optimization_params=request.constraints or {},
-            result_data=result,
+            weights=result.get("weights", {}),
+            shares=result.get("shares", {}),
+            leftover_cash=result.get("leftover_cash"),
+            extra_data=result.get("raw_result"),
         )
 
         db.add(optimization_run)
         db.commit()
         db.refresh(optimization_run)
-
-        return {
-            "optimization_id": optimization_run.id,
-            "model": request.model,
-            "symbols": symbols,
-            "weights": result.get("weights", {}),
-            "metrics": {
-                "expected_return": result.get("expected_return"),
-                "expected_volatility": result.get("expected_volatility"),
-                "sharpe_ratio": result.get("sharpe_ratio"),
-                "cvar": result.get("cvar"),
-                "max_drawdown": result.get("max_drawdown"),
-            },
-            "efficient_frontier": result.get("efficient_frontier"),
-            "created_at": optimization_run.created_at,
-        }
-
-    except Exception as e:
+        return optimization_run
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Optimization failed: {str(e)}",
+            detail=f"Optimization failed: {exc}",
         )
 
 
 @router.get("/runs", response_model=List[OptimizationRunResponse])
 def list_optimization_runs(
     portfolio_id: Optional[int] = Query(None, description="Filter by portfolio ID"),
-    model_type: Optional[str] = Query(None, description="Filter by model type"),
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Get optimization run history for the current user.
-
-    Can filter by portfolio or model type.
-    """
+    """Get optimization run history for the current user."""
     query = db.query(OptimizationRun).filter(OptimizationRun.user_id == current_user.id)
 
     if portfolio_id:
         query = query.filter(OptimizationRun.portfolio_id == portfolio_id)
 
-    if model_type:
-        query = query.filter(OptimizationRun.model_type == model_type)
+    if model_name:
+        query = query.filter(OptimizationRun.model_name == model_name)
 
-    runs = (
+    return (
         query.order_by(OptimizationRun.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
-
-    return runs
 
 
 @router.get("/runs/{run_id}", response_model=OptimizationRunResponse)
@@ -178,9 +129,7 @@ def get_optimization_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Get details of a specific optimization run.
-    """
+    """Get details of a specific optimization run."""
     run = (
         db.query(OptimizationRun)
         .filter(
@@ -188,12 +137,10 @@ def get_optimization_run(
         )
         .first()
     )
-
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Optimization run not found"
         )
-
     return run
 
 
@@ -203,9 +150,7 @@ def delete_optimization_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    """
-    Delete an optimization run.
-    """
+    """Delete an optimization run."""
     run = (
         db.query(OptimizationRun)
         .filter(
@@ -213,12 +158,10 @@ def delete_optimization_run(
         )
         .first()
     )
-
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Optimization run not found"
         )
-
     db.delete(run)
     db.commit()
 
@@ -231,23 +174,10 @@ def run_backtest(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Run portfolio backtest.
-
-    Tests portfolio performance over historical data.
-
-    Parameters:
-    - **optimization_id**: Optional optimization run ID to backtest
-    - **weights**: Portfolio weights (required if no optimization_id)
-    - **symbols**: Stock symbols (required if no optimization_id)
-    - **start_date**: Backtest start date
-    - **end_date**: Backtest end date
-    - **initial_capital**: Starting capital amount
-    - **rebalance_frequency**: How often to rebalance (daily, weekly, monthly)
-    """
-    # Get weights from optimization run if provided
+    """Run portfolio backtest and persist the result."""
     weights = request.weights
     symbols = request.symbols
+    optimization_run_id = request.optimization_id
 
     if request.optimization_id:
         optimization_run = (
@@ -258,7 +188,6 @@ def run_backtest(
             )
             .first()
         )
-
         if not optimization_run:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -266,31 +195,28 @@ def run_backtest(
             )
 
         weights = optimization_run.weights
-        symbols = optimization_run.symbols
+        symbols = optimization_run.input_symbols
+        optimization_run_id = optimization_run.id
 
     if not weights or not symbols:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Weights and symbols required",
+            detail="Weights and symbols are required",
         )
 
     try:
-        # Run backtest
         result = optimization_service.backtest_portfolio(
             symbols=symbols,
             weights=weights,
             start_date=request.start_date,
             end_date=request.end_date,
-            initial_capital=request.initial_capital,
+            initial_capital=float(request.initial_capital),
             rebalance_frequency=request.rebalance_frequency,
         )
 
-        # Save backtest result
         backtest = BacktestResult(
             user_id=current_user.id,
-            optimization_id=request.optimization_id,
-            symbols=symbols,
-            weights=weights,
+            optimization_run_id=optimization_run_id,
             start_date=request.start_date,
             end_date=request.end_date,
             initial_capital=request.initial_capital,
@@ -301,64 +227,39 @@ def run_backtest(
             sharpe_ratio=result.get("sharpe_ratio"),
             max_drawdown=result.get("max_drawdown"),
             win_rate=result.get("win_rate"),
-            backtest_data=result,
+            backtest_data=result.get("backtest_data"),
         )
 
         db.add(backtest)
         db.commit()
         db.refresh(backtest)
-
-        return {
-            "backtest_id": backtest.id,
-            "optimization_id": request.optimization_id,
-            "symbols": symbols,
-            "weights": weights,
-            "performance": {
-                "initial_capital": request.initial_capital,
-                "final_value": result.get("final_value"),
-                "total_return": result.get("total_return"),
-                "annualized_return": result.get("annualized_return"),
-                "volatility": result.get("volatility"),
-                "sharpe_ratio": result.get("sharpe_ratio"),
-                "max_drawdown": result.get("max_drawdown"),
-                "win_rate": result.get("win_rate"),
-            },
-            "equity_curve": result.get("equity_curve"),
-            "drawdown_curve": result.get("drawdown_curve"),
-            "trades": result.get("trades"),
-            "created_at": backtest.created_at,
-        }
-
-    except Exception as e:
+        return backtest
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Backtest failed: {str(e)}",
+            detail=f"Backtest failed: {exc}",
         )
 
 
 @router.get("/backtests", response_model=List[BacktestResponse])
 def list_backtests(
-    optimization_id: Optional[int] = Query(
-        None, description="Filter by optimization ID"
+    optimization_run_id: Optional[int] = Query(
+        None, description="Filter by optimization run ID"
     ),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Get backtest history for the current user.
-    """
+    """Get backtest history for the current user."""
     query = db.query(BacktestResult).filter(BacktestResult.user_id == current_user.id)
 
-    if optimization_id:
-        query = query.filter(BacktestResult.optimization_id == optimization_id)
+    if optimization_run_id:
+        query = query.filter(BacktestResult.optimization_run_id == optimization_run_id)
 
-    backtests = (
+    return (
         query.order_by(BacktestResult.created_at.desc()).offset(skip).limit(limit).all()
     )
-
-    return backtests
 
 
 @router.get("/backtests/{backtest_id}", response_model=BacktestResponse)
@@ -367,9 +268,7 @@ def get_backtest(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Get details of a specific backtest.
-    """
+    """Get details of a specific backtest."""
     backtest = (
         db.query(BacktestResult)
         .filter(
@@ -377,12 +276,10 @@ def get_backtest(
         )
         .first()
     )
-
     if not backtest:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Backtest not found"
         )
-
     return backtest
 
 
@@ -392,9 +289,7 @@ def delete_backtest(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    """
-    Delete a backtest result.
-    """
+    """Delete a backtest result."""
     backtest = (
         db.query(BacktestResult)
         .filter(
@@ -402,21 +297,17 @@ def delete_backtest(
         )
         .first()
     )
-
     if not backtest:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Backtest not found"
         )
-
     db.delete(backtest)
     db.commit()
 
 
 @router.get("/models")
 def list_optimization_models(current_user: User = Depends(get_current_user)) -> Any:
-    """
-    Get list of available optimization models with descriptions.
-    """
+    """Get list of available optimization models with descriptions."""
     return {
         "models": [
             {

@@ -1,23 +1,21 @@
+from datetime import datetime
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.chatbot.chatbot_service import GeminiChatbot
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User
+from app.models.chat import ChatConversation, ChatFeedback, ChatMessage
+from app.models.user import User, UserSettings
 from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
     ConversationResponse,
 )
-from app.chatbot.gemini_chatbot import GeminiChatbot
-from app.chatbot.market_data_adapter import MarketDataAdapter
 
 router = APIRouter(prefix="/chat", tags=["Chatbot"])
-
-# Initialize chatbot (will be created per request with user context)
-market_adapter = MarketDataAdapter()
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -26,37 +24,17 @@ def send_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Send a message to the AI chatbot.
-
-    The chatbot can answer questions about:
-    - Market data and stock information
-    - Portfolio optimization strategies
-    - Investment advice and analysis
-    - Vietnamese stock market insights
-
-    Parameters:
-    - **message**: User's message/question
-    - **conversation_id**: Optional conversation ID to continue a conversation
-    - **context**: Optional additional context (portfolio data, etc.)
-    """
+    """Send a message to chatbot and persist conversation history."""
     try:
-        # Initialize chatbot for this user
         chatbot = GeminiChatbot(user_id=current_user.id)
-
-        # Get user settings for personalization
-        from app.models.user import UserSettings
 
         user_settings = (
             db.query(UserSettings)
             .filter(UserSettings.user_id == current_user.id)
             .first()
         )
-
-        # Prepare context
         context = request.context or {}
 
-        # Add user preferences to context if available
         if user_settings:
             context["user_preferences"] = {
                 "risk_tolerance": user_settings.risk_tolerance,
@@ -64,14 +42,12 @@ def send_message(
                 "preferred_sectors": user_settings.preferred_sectors,
             }
 
-        # Add portfolio context if requested
         if request.include_portfolio_context:
             from app.models.portfolio import Portfolio, PortfolioStock
 
             portfolios = (
                 db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
             )
-
             portfolio_data = []
             for portfolio in portfolios:
                 stocks = (
@@ -79,46 +55,87 @@ def send_message(
                     .filter(PortfolioStock.portfolio_id == portfolio.id)
                     .all()
                 )
-
                 portfolio_data.append(
                     {
                         "name": portfolio.name,
-                        "value": portfolio.current_value,
+                        "value": getattr(portfolio, "current_value", None),
                         "stocks": [
                             {
                                 "symbol": stock.symbol,
-                                "quantity": stock.quantity,
+                                "quantity": getattr(
+                                    stock, "quantity", getattr(stock, "shares", None)
+                                ),
                                 "purchase_price": stock.purchase_price,
                             }
                             for stock in stocks
                         ],
                     }
                 )
-
             context["portfolios"] = portfolio_data
 
-        # Get response from chatbot
+        conversation = None
+        if request.conversation_id:
+            conversation = (
+                db.query(ChatConversation)
+                .filter(
+                    ChatConversation.id == request.conversation_id,
+                    ChatConversation.user_id == current_user.id,
+                )
+                .first()
+            )
+
+        if conversation is None:
+            if request.conversation_id:
+                conversation = ChatConversation(
+                    id=request.conversation_id, user_id=current_user.id
+                )
+            else:
+                conversation = ChatConversation(user_id=current_user.id)
+            db.add(conversation)
+            db.flush()
+
         response = chatbot.chat(
             message=request.message,
-            conversation_id=request.conversation_id,
+            conversation_id=conversation.id,
             context=context,
         )
 
-        # Store conversation in user settings for history
-        # (In production, you might want a separate ConversationHistory table)
+        assistant_timestamp = response.get("timestamp")
+        if not isinstance(assistant_timestamp, datetime):
+            assistant_timestamp = datetime.utcnow()
+
+        user_message = ChatMessage(
+            conversation_id=conversation.id,
+            role="user",
+            content=request.message,
+            timestamp=datetime.utcnow(),
+        )
+        assistant_message = ChatMessage(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=response.get("response", ""),
+            sources=response.get("sources", []),
+            suggested_actions=response.get("suggested_actions", []),
+            timestamp=assistant_timestamp,
+        )
+
+        conversation.updated_at = datetime.utcnow()
+        db.add(user_message)
+        db.add(assistant_message)
+        db.commit()
 
         return {
-            "message": response.get("response"),
-            "conversation_id": response.get("conversation_id"),
-            "sources": response.get("sources", []),
-            "suggested_actions": response.get("suggested_actions", []),
-            "timestamp": response.get("timestamp"),
+            "message": assistant_message.content,
+            "conversation_id": conversation.id,
+            "sources": assistant_message.sources or [],
+            "suggested_actions": assistant_message.suggested_actions or [],
+            "timestamp": assistant_message.timestamp,
         }
-
-    except Exception as e:
+    except Exception as exc:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chat failed: {str(e)}",
+            detail=f"Chat failed: {exc}",
         )
 
 
@@ -129,16 +146,15 @@ def list_conversations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Get conversation history for the current user.
-
-    Returns list of past conversations with the chatbot.
-    """
-    # Note: This would require a ConversationHistory table
-    # For now, returning empty list as placeholder
-    # TODO: Implement conversation history storage
-
-    return []
+    """Get conversation history for current user."""
+    return (
+        db.query(ChatConversation)
+        .filter(ChatConversation.user_id == current_user.id)
+        .order_by(ChatConversation.updated_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -147,19 +163,20 @@ def get_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Get a specific conversation by ID.
-
-    Returns the full conversation history with all messages.
-    """
-    # Note: This would require a ConversationHistory table
-    # For now, raising 404 as placeholder
-    # TODO: Implement conversation retrieval
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Conversation history not yet implemented",
+    """Get one conversation with all messages."""
+    conversation = (
+        db.query(ChatConversation)
+        .filter(
+            ChatConversation.id == conversation_id,
+            ChatConversation.user_id == current_user.id,
+        )
+        .first()
     )
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
+    return conversation
 
 
 @router.delete(
@@ -170,14 +187,21 @@ def delete_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    """
-    Delete a conversation.
-
-    Removes the conversation history from storage.
-    """
-    # Note: This would require a ConversationHistory table
-    # TODO: Implement conversation deletion
-    pass
+    """Delete one conversation."""
+    conversation = (
+        db.query(ChatConversation)
+        .filter(
+            ChatConversation.id == conversation_id,
+            ChatConversation.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
+    db.delete(conversation)
+    db.commit()
 
 
 @router.post("/feedback")
@@ -189,19 +213,41 @@ def submit_feedback(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Any:
-    """
-    Submit feedback for a chatbot response.
+    """Submit feedback for a chatbot response."""
+    conversation = (
+        db.query(ChatConversation)
+        .filter(
+            ChatConversation.id == conversation_id,
+            ChatConversation.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
 
-    Helps improve the chatbot's responses over time.
+    message = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.id == message_id, ChatMessage.conversation_id == conversation_id
+        )
+        .first()
+    )
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
+        )
 
-    Parameters:
-    - **conversation_id**: Conversation ID
-    - **message_id**: Specific message ID to rate
-    - **rating**: Rating from 1 (poor) to 5 (excellent)
-    - **feedback**: Optional text feedback
-    """
-    # TODO: Store feedback in database for analysis
-    # This would help improve chatbot responses over time
+    feedback_row = ChatFeedback(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        user_id=current_user.id,
+        rating=rating,
+        feedback_text=feedback,
+    )
+    db.add(feedback_row)
+    db.commit()
 
     return {
         "message": "Feedback received. Thank you!",
@@ -214,11 +260,7 @@ def submit_feedback(
 def get_chat_suggestions(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> Any:
-    """
-    Get suggested questions/prompts for the chatbot.
-
-    Returns contextual suggestions based on user's portfolio and market conditions.
-    """
+    """Get suggested prompts for the chatbot."""
     suggestions = [
         {
             "category": "Market Analysis",
@@ -258,14 +300,10 @@ def get_chat_suggestions(
         },
     ]
 
-    # Personalize suggestions based on user's portfolios
     from app.models.portfolio import Portfolio
 
-    portfolios = (
-        db.query(Portfolio).filter(Portfolio.user_id == current_user.id).first()
-    )
-
-    if portfolios:
+    portfolio = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).first()
+    if portfolio:
         suggestions.insert(
             0,
             {

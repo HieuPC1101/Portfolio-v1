@@ -6,7 +6,7 @@ from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
 
-from data_process.data_loader import (
+from app.data_process.data_loader import (
     get_foreign_flow_leaderboard,
     get_index_history,
     get_indices_history,
@@ -33,28 +33,46 @@ class MarketOverviewService:
             if not rows:
                 return pd.DataFrame(columns=["symbol", "industry_level_1"])
             data = [
-                {"symbol": r.symbol.upper(), "industry_level_1": r.icb_name or "Ngành khác"}
+                {
+                    "symbol": r.symbol.upper(),
+                    "industry_level_1": r.icb_name or "Ngành khác",
+                }
                 for r in rows
             ]
             return pd.DataFrame(data)
         finally:
             db.close()
 
-    def load_overview_data(self, analysis_start_date: str, analysis_end_date: str) -> Dict[str, object]:
+    def load_overview_data(
+        self, analysis_start_date: str, analysis_end_date: str
+    ) -> Dict[str, object]:
         """Fetch lightweight data powering KPI cards and index chart."""
         analysis_start = pd.to_datetime(analysis_start_date).strftime("%Y-%m-%d")
         analysis_end = pd.to_datetime(analysis_end_date).strftime("%Y-%m-%d")
-        months_span = max(1, int((pd.to_datetime(analysis_end) - pd.to_datetime(analysis_start)).days / 30))
+        months_span = max(
+            1,
+            int(
+                (pd.to_datetime(analysis_end) - pd.to_datetime(analysis_start)).days
+                / 30
+            ),
+        )
 
         return {
             "indices_metrics": get_market_indices_metrics(),
-            "index_history": get_indices_history(start_date=analysis_start, end_date=analysis_end, months=months_span),
+            "index_history": get_indices_history(
+                start_date=analysis_start, end_date=analysis_end, months=months_span
+            ),
         }
 
-    def build_realtime_metrics(self, symbols: Iterable[str], labels: Dict[str, str]) -> List[dict]:
+    def build_realtime_metrics(
+        self, symbols: Iterable[str], labels: Dict[str, str]
+    ) -> List[dict]:
         """Build realtime/fallback metric cards for configured index symbols."""
         realtime_symbols = list(symbols)
-        symbol_keys = sorted({symbol.upper() for symbol in realtime_symbols} | {symbol.upper() for symbol in labels.keys()})
+        symbol_keys = sorted(
+            {symbol.upper() for symbol in realtime_symbols}
+            | {symbol.upper() for symbol in labels.keys()}
+        )
 
         board = get_realtime_index_board(realtime_symbols)
         metrics: List[dict] = []
@@ -71,7 +89,9 @@ class MarketOverviewService:
         def _get_sorted_history(symbol_key):
             if symbol_key not in history_cache:
                 history = get_index_history(symbol_key, months=1)
-                history_cache[symbol_key] = history.sort_values("time") if not history.empty else pd.DataFrame()
+                history_cache[symbol_key] = (
+                    history.sort_values("time") if not history.empty else pd.DataFrame()
+                )
             return history_cache[symbol_key]
 
         if board is not None and not board.empty:
@@ -99,9 +119,17 @@ class MarketOverviewService:
                     last_row = history.iloc[-1]
                     prev_row = history.iloc[-2] if len(history) > 1 else last_row
                     price = float(last_row["close"])
-                    reference = float(prev_row["close"]) if pd.notna(prev_row["close"]) else price
+                    reference = (
+                        float(prev_row["close"])
+                        if pd.notna(prev_row["close"])
+                        else price
+                    )
                     change = price - reference
-                    pct_change = (change / reference * 100) if reference not in (0, None) else 0.0
+                    pct_change = (
+                        (change / reference * 100)
+                        if reference not in (0, None)
+                        else 0.0
+                    )
                     note_text = "Dữ liệu cuối phiên"
                     note_ts = pd.to_datetime(last_row["time"]).to_pydatetime()
                 else:
@@ -111,7 +139,11 @@ class MarketOverviewService:
                     if change is None and base_reference is not None:
                         change = price - base_reference
                     if pct_change is None and base_reference not in (None, 0):
-                        pct_change = (change / base_reference * 100) if change is not None else 0.0
+                        pct_change = (
+                            (change / base_reference * 100)
+                            if change is not None
+                            else 0.0
+                        )
 
                 if change is None:
                     change = 0.0
@@ -142,13 +174,19 @@ class MarketOverviewService:
 
             last_row = history.iloc[-1]
             prev_row = history.iloc[-2] if len(history) > 1 else last_row
-            last_close = float(last_row["close"]) if pd.notna(last_row["close"]) else None
-            prev_close = float(prev_row["close"]) if pd.notna(prev_row["close"]) else None
+            last_close = (
+                float(last_row["close"]) if pd.notna(last_row["close"]) else None
+            )
+            prev_close = (
+                float(prev_row["close"]) if pd.notna(prev_row["close"]) else None
+            )
             if last_close is None:
                 continue
 
             change = last_close - (prev_close if prev_close is not None else last_close)
-            pct_change = (change / prev_close * 100) if prev_close not in (0, None) else 0.0
+            pct_change = (
+                (change / prev_close * 100) if prev_close not in (0, None) else 0.0
+            )
             timestamp = pd.to_datetime(last_row["time"]).to_pydatetime()
             metrics.append(
                 {
@@ -164,7 +202,9 @@ class MarketOverviewService:
 
         return metrics
 
-    def load_sector_snapshot(self, companies_df: pd.DataFrame, size: int = 250) -> pd.DataFrame:
+    def load_sector_snapshot(
+        self, companies_df: pd.DataFrame, size: int = 250
+    ) -> pd.DataFrame:
         """Load and normalize sector snapshot."""
         snapshot = get_sector_snapshot(exchange="HOSE", size=size)
         if snapshot.empty:
@@ -179,15 +219,21 @@ class MarketOverviewService:
             "avg_trading_value_20d",
             "foreign_buysell_20s",
         ]
-        cols_to_keep = [column for column in snapshot_columns if column in snapshot.columns]
+        cols_to_keep = [
+            column for column in snapshot_columns if column in snapshot.columns
+        ]
         if cols_to_keep:
             snapshot = snapshot[cols_to_keep]
 
         if not companies_df.empty and "ticker" in snapshot.columns:
             working = snapshot.copy()
             working["ticker"] = working["ticker"].astype(str).str.upper()
-            merged = working.merge(companies_df, left_on="ticker", right_on="symbol", how="left")
-            merged["industry_level_1"] = merged["industry_level_1"].fillna(merged.get("industry", "Ngành khác"))
+            merged = working.merge(
+                companies_df, left_on="ticker", right_on="symbol", how="left"
+            )
+            merged["industry_level_1"] = merged["industry_level_1"].fillna(
+                merged.get("industry", "Ngành khác")
+            )
             merged["industry"] = merged["industry_level_1"]
             merged = merged.drop(columns=["symbol"], errors="ignore")
             return merged
@@ -202,6 +248,52 @@ class MarketOverviewService:
             "market_cap": summarize_market_cap_distribution(sector_snapshot, top_n=8),
             "foreign_flow": get_foreign_flow_leaderboard(sector_snapshot, top_n=6),
             "liquidity": get_liquidity_leaders(sector_snapshot, top_n=40),
+        }
+
+    def get_market_overview(self) -> Dict[str, object]:
+        """Return a lightweight market overview payload for the API."""
+        metrics = get_market_indices_metrics()
+        return {
+            "indices": {
+                "vnindex": self._metric_to_index(metrics, "VNINDEX", "VN-Index"),
+                "vn30": self._metric_to_index(metrics, "VN30", "VN30"),
+                "hnx": self._metric_to_index(metrics, "HNXINDEX", "HNX-Index"),
+                "upcom": self._metric_to_index(metrics, "UPCOMINDEX", "UPCoM"),
+                "timestamp": pd.Timestamp.utcnow().to_pydatetime(),
+            },
+            "top_gainers": [],
+            "top_losers": [],
+            "most_active": [],
+            "statistics": {
+                "total_stocks": 0,
+                "advancing": 0,
+                "declining": 0,
+                "unchanged": 0,
+                "total_volume": 0,
+                "total_value": 0,
+            },
+            "timestamp": pd.Timestamp.utcnow().to_pydatetime(),
+        }
+
+    @staticmethod
+    def _metric_to_index(
+        metrics: List[dict], symbol: str, label: str
+    ) -> Dict[str, object]:
+        for metric in metrics:
+            if str(metric.get("symbol", "")).upper() == symbol:
+                return {
+                    "name": metric.get("label", label),
+                    "value": float(metric.get("value") or 0),
+                    "change": float(metric.get("change") or 0),
+                    "change_percent": float(metric.get("pct_change") or 0),
+                    "volume": None,
+                }
+        return {
+            "name": label,
+            "value": 0.0,
+            "change": 0.0,
+            "change_percent": 0.0,
+            "volume": None,
         }
 
 

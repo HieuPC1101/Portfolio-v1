@@ -13,6 +13,44 @@ import numbers
 import requests
 from bs4 import BeautifulSoup
 
+from app.services.news_crawler import fetch_all_sources, fetch_stock_news_from_sources
+
+# ---------------------------------------------------------------------------
+# In-memory cache (2-layer: short-term API cache)
+# ---------------------------------------------------------------------------
+_news_cache: Dict[str, Tuple[List[dict], datetime]] = {}
+_NEWS_TTL_SECONDS = 300  # 5 minutes
+
+
+def _cache_key(kind: str, identifier: str = "", category: str = "") -> str:
+    return f"{kind}:{identifier}:{category}"
+
+
+def _get_cached(key: str) -> Optional[List[dict]]:
+    entry = _news_cache.get(key)
+    if entry:
+        data, ts = entry
+        if datetime.utcnow() - ts < timedelta(seconds=_NEWS_TTL_SECONDS):
+            return data
+    return None
+
+
+def _set_cached(key: str, data: List[dict]) -> None:
+    _news_cache[key] = (data, datetime.utcnow())
+
+
+def _crawler_to_news_article(art: dict) -> dict:
+    """Map internal crawler dict → NewsArticle schema fields."""
+    return {
+        "title": art.get("title") or "",
+        "summary": art.get("summary"),
+        "url": art.get("url"),
+        "source": art.get("source"),
+        "published_at": art.get("published_at"),
+        "category": art.get("category"),
+        "symbols": art.get("symbols") or [],
+    }
+
 VN_STOCK_KEYWORDS = [
     "chứng khoán",
     "thị trường việt nam",
@@ -516,6 +554,48 @@ class NewsService:
             )
 
         return collected_news[:max_articles]
+
+
+    def get_latest_news(
+        self,
+        limit: int = 20,
+        category: Optional[str] = None,
+        refresh: bool = False,
+    ) -> List[dict]:
+        """Fetch latest VN stock news, with optional cache bypass."""
+        key = _cache_key("latest", category=category or "")
+        if not refresh:
+            cached = _get_cached(key)
+            if cached is not None:
+                return cached[:limit]
+
+        articles = fetch_all_sources(limit=limit * 3)
+        if category:
+            cat_lower = category.lower()
+            articles = [a for a in articles if (a.get("category") or "").lower() == cat_lower]
+
+        result = [_crawler_to_news_article(a) for a in articles[:limit]]
+        _set_cached(key, result)
+        return result
+
+    def get_stock_news(
+        self,
+        symbol: str,
+        limit: int = 10,
+        refresh: bool = False,
+    ) -> List[dict]:
+        """Fetch news related to a specific stock symbol, with optional cache bypass."""
+        symbol_upper = symbol.upper()
+        key = _cache_key("stock", identifier=symbol_upper)
+        if not refresh:
+            cached = _get_cached(key)
+            if cached is not None:
+                return cached[:limit]
+
+        articles = fetch_stock_news_from_sources(symbol=symbol_upper, limit=limit)
+        result = [_crawler_to_news_article(a) for a in articles]
+        _set_cached(key, result)
+        return result
 
 
 _news_service: Optional[NewsService] = None

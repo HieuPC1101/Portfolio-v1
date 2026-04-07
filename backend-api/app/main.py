@@ -36,17 +36,36 @@ app.add_middleware(
 )
 
 
+def _register_vnstock_api_key() -> None:
+    """Đăng ký API key vnstock từ biến môi trường khi khởi động."""
+    import os
+    api_key = os.getenv("VNSTOCK_API_KEY")
+    if not api_key:
+        logger.warning("VNSTOCK_API_KEY không được đặt — chạy với giới hạn Guest (20 req/min).")
+        return
+    try:
+        from vnstock.core.utils.auth import register_user
+        success = register_user(api_key=api_key)
+        if success:
+            logger.info("Đã đăng ký VNSTOCK_API_KEY thành công (60 req/min).")
+        else:
+            logger.warning("Đăng ký VNSTOCK_API_KEY thất bại, tiếp tục với Guest tier.")
+    except Exception as e:
+        logger.warning(f"Không thể đăng ký VNSTOCK_API_KEY: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Environment: {settings.environment}")
 
+    _register_vnstock_api_key()
+
     # Initialize database (create tables if they don't exist)
     # Note: In production, use Alembic migrations instead
     if settings.debug:
         logger.info("Initializing database tables...")
-        # init_db()  # Uncomment when models are ready
 
 
 @app.on_event("shutdown")

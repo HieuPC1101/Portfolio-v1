@@ -6,7 +6,7 @@
 cd backend-api
 
 python -m venv venv
-.\venv\Scripts\activate        # Windows
+.\.venv\Scripts\activate        # Windows
 # source venv/bin/activate     # Linux/Mac
 
 pip install -r requirements.txt
@@ -40,7 +40,8 @@ alembic upgrade head
 ## 4. Khởi động server
 
 ```bash
-python run.py
+python run.py / uvicorn app.main:app --reload
+
 ```
 
 Server chạy tại: `http://localhost:8000`

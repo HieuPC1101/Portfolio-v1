@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -96,17 +96,19 @@ def login(
     # Create access and refresh tokens
     access_token = create_access_token(
         data={"sub": user.username},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
     refresh_token = create_refresh_token(
         data={"sub": user.username},
-        expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(days=settings.refresh_token_expire_days),
     )
 
     # Store session in database
     session = UserSession(
         user_id=user.id,
         refresh_token=refresh_token,
+        expires_at=datetime.utcnow()
+        + timedelta(days=settings.refresh_token_expire_days),
     )
     db.add(session)
     db.commit()
@@ -128,7 +130,7 @@ def refresh_token(
     Returns new access token and refresh token.
     """
     # Verify refresh token
-    payload = verify_token(refresh_data.refresh_token)
+    payload = verify_token(refresh_data.refresh_token, token_type="refresh")
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -174,17 +176,19 @@ def refresh_token(
     # Create new tokens
     access_token = create_access_token(
         data={"sub": user.username},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
     new_refresh_token = create_refresh_token(
         data={"sub": user.username},
-        expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_delta=timedelta(days=settings.refresh_token_expire_days),
     )
 
     # Create new session
     new_session = UserSession(
         user_id=user.id,
         refresh_token=new_refresh_token,
+        expires_at=datetime.utcnow()
+        + timedelta(days=settings.refresh_token_expire_days),
     )
     db.add(new_session)
     db.commit()

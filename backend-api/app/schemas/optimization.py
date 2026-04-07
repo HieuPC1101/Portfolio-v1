@@ -1,25 +1,25 @@
-"""
-Optimization schemas for request/response validation.
-"""
+"""Optimization schemas for request/response validation."""
 
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Dict, Optional, Any
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-# Optimization Request
 class OptimizationRequest(BaseModel):
     """Schema for optimization request."""
 
-    symbols: List[str] = Field(..., min_items=2, max_items=50)
+    symbols: List[str] = Field(default_factory=list)
     model: str = Field(
-        ..., pattern="^(Markowitz|Max_Sharpe|Min_Volatility|HRP|Min_CVaR|Min_CDaR)$"
+        ...,
+        pattern=r"^(Markowitz|Max_Sharpe|Min_Volatility|HRP|Min_CVaR|Min_CDaR|markowitz|max_sharpe|min_volatility|hrp|min_cvar|min_cdar)$",
     )
     investment: Decimal = Field(..., gt=0)
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     portfolio_id: Optional[int] = None
+    constraints: Optional[Dict[str, Any]] = None
 
 
 class OptimizationResponse(BaseModel):
@@ -43,32 +43,44 @@ class OptimizationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Backtest Schemas
+class OptimizationRunResponse(OptimizationResponse):
+    """Schema for optimization run history rows."""
+
+
 class BacktestRequest(BaseModel):
     """Schema for backtest request."""
 
-    optimization_run_id: int
+    optimization_id: Optional[int] = None
+    weights: Optional[Dict[str, float]] = None
+    symbols: Optional[List[str]] = None
     start_date: date
     end_date: date
+    initial_capital: Decimal = Field(..., gt=0)
+    rebalance_frequency: str = Field(default="monthly")
 
 
 class BacktestResponse(BaseModel):
     """Schema for backtest response."""
 
     id: int
-    optimization_run_id: int
+    user_id: int
+    optimization_run_id: Optional[int]
     start_date: date
     end_date: date
+    initial_capital: Optional[Decimal]
+    final_value: Optional[Decimal]
     total_return: Optional[Decimal]
+    annualized_return: Optional[Decimal]
+    volatility: Optional[Decimal]
     max_drawdown: Optional[Decimal]
     sharpe_ratio: Optional[Decimal]
-    results_data: Optional[Dict[str, Any]]
+    win_rate: Optional[Decimal]
+    backtest_data: Optional[Dict[str, Any]]
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# Market Data Schemas
 class StockPriceData(BaseModel):
     """Schema for stock price data."""
 
@@ -94,7 +106,6 @@ class FundamentalData(BaseModel):
     fetched_at: datetime
 
 
-# Optimization Comparison
 class OptimizationComparison(BaseModel):
     """Schema for comparing multiple optimization results."""
 

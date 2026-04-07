@@ -71,24 +71,34 @@ class BacktestResult(Base):
     __tablename__ = "backtest_results"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     optimization_run_id = Column(
-        Integer, ForeignKey("optimization_runs.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("optimization_runs.id", ondelete="CASCADE"), nullable=True
     )
 
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
 
+    initial_capital = Column(Numeric(15, 2), nullable=True)
+    final_value = Column(Numeric(15, 2), nullable=True)
+
     # Performance metrics
     total_return = Column(Numeric(8, 4), nullable=True)
+    annualized_return = Column(Numeric(8, 4), nullable=True)
+    volatility = Column(Numeric(8, 4), nullable=True)
     max_drawdown = Column(Numeric(8, 4), nullable=True)
     sharpe_ratio = Column(Numeric(8, 4), nullable=True)
+    win_rate = Column(Numeric(8, 4), nullable=True)
 
     # Full time series data
-    results_data = Column(JSONB, nullable=True)
+    backtest_data = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
+    user = relationship("User")
     optimization_run = relationship(
         "OptimizationRun", back_populates="backtest_results"
     )
@@ -138,6 +148,9 @@ class FundamentalsCache(Base):
     roe = Column(Numeric(8, 4), nullable=True)
     roa = Column(Numeric(8, 4), nullable=True)
     profit_margin = Column(Numeric(8, 4), nullable=True)
+
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    fundamentals_data = Column(JSONB, nullable=True)
 
     fetched_at = Column(DateTime(timezone=True), server_default=func.now())
 

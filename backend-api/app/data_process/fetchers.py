@@ -31,7 +31,7 @@ def fetch_data_from_csv(file_path: str) -> pd.DataFrame:
 
 def create_vnstock_instance():
     """Return a default Vnstock instance."""
-    return Vnstock().stock(symbol='VNINDEX', source='MSN')
+    return Vnstock().stock(symbol='VNINDEX', source='VCI')
 
 def _normalize_symbols(symbols: Iterable[str]) -> Tuple[List[str], List[str]]:
     """Return uppercase symbols without duplicates and list of discarded ones."""
@@ -55,8 +55,8 @@ def _fetch_single_stock_cached(ticker: str, start_date: str, end_date: str) -> p
     Fetch a single ticker history and cache the response.
     Returns a DataFrame with DatetimeIndex.
     """
-    # Try MSN first, fallback to VCI if needed
-    sources = ['MSN', 'VCI']
+    # Try VCI first, fallback to MSN if needed
+    sources = ['VCI', 'MSN']
     last_error = None
     
     for source in sources:
@@ -173,7 +173,7 @@ def fetch_stock_data2(symbols: List[str], start_date: str, end_date: str,
 @lru_cache(maxsize=256)
 def _fetch_latest_price_single(ticker: str, start_date: str, end_date: str) -> Tuple[Optional[float], Optional[str]]:
     """Return latest close price (in VND) for ticker."""
-    sources = ['MSN', 'VCI']
+    sources = ['VCI', 'MSN']
     
     for source in sources:
         try:
@@ -229,7 +229,7 @@ def get_latest_prices(tickers: List[str]) -> Dict[str, float]:
 
 def fetch_ohlc_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch OHLCV data for a single ticker."""
-    sources = ['MSN', 'VCI']
+    sources = ['VCI', 'MSN']
     
     for source in sources:
         try:
@@ -257,22 +257,22 @@ def fetch_ohlc_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame
 
 def get_index_history(symbol: str = "VNINDEX", start_date: Optional[str] = None,
                       end_date: Optional[str] = None, months: int = 6,
-                      source: str = "MSN") -> pd.DataFrame:
+                      source: str = "VCI") -> pd.DataFrame:
     """Fetch historical quotes for a market index."""
     # Xử lý ngày tháng
     today = datetime.datetime.now(VN_TZ).date()
     e_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else today
-    
+
     if start_date:
         s_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
     else:
         s_date = e_date - datetime.timedelta(days=months * 30)
-    
+
     # Đảm bảo start < end
     if s_date > e_date:
          s_date = e_date - datetime.timedelta(days=30)
 
-    sources = [source, 'MSN', 'VCI'] if source else ['MSN', 'VCI']
+    sources = [source, 'VCI', 'MSN'] if source else ['VCI', 'MSN']
     
     for src in sources:
         try:

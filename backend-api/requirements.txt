@@ -1,7 +1,7 @@
 # FastAPI Core
 fastapi==0.110.0
 uvicorn[standard]==0.27.1
-pydantic==2.6.1
+pydantic[email]==2.6.1
 pydantic-settings==2.1.0
 
 # Database
@@ -17,6 +17,7 @@ postgrest==0.13.2
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 python-multipart==0.0.9
 
 # Redis & Caching
@@ -32,8 +33,8 @@ numpy==1.26.3
 scipy==1.12.0
 statsmodels==0.14.1
 PyPortfolioOpt==1.5.5
-vnstock==2.0.0
-vnai==0.1.0
+vnstock==3.5.1
+vnai==2.4.6
 google-generativeai==0.3.2
 
 # Utilities
@@ -45,11 +46,10 @@ pytz==2024.1
 
 # Visualization (for backend data processing)
 plotly==5.18.0
-pandas-ta==0.3.14b0
 
 # Development
-pytest==8.0.0
+pytest==7.4.4
 pytest-asyncio==0.23.4
-httpx==0.26.0
+httpx==0.25.2
 black==24.1.1
 ruff==0.2.1
