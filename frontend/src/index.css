@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 216 28% 7%;
+    --foreground: 213 27% 92%;
+
+    --card: 215 25% 11%;
+    --card-foreground: 213 27% 92%;
+
+    --popover: 216 20% 16%;
+    --popover-foreground: 213 27% 92%;
+
+    --primary: 131 45% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 25% 11%;
+    --secondary-foreground: 213 27% 92%;
+
+    --muted: 216 14% 20%;
+    --muted-foreground: 215 10% 55%;
+
+    --accent: 216 20% 16%;
+    --accent-foreground: 213 27% 92%;
+
+    --destructive: 0 72% 63%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 216 14% 22%;
+    --input: 216 14% 22%;
+    --ring: 131 45% 40%;
+
+    --radius: 0.5rem;
+
+    /* Stock colors */
+    --price-up: 131 56% 40%;
+    --price-down: 0 90% 63%;
+    --price-ceil: 280 50% 63%;
+    --price-floor: 187 45% 55%;
+    --price-ref: 40 65% 65%;
+
+    /* Tertiary / Elevated */
+    --bg-tertiary: 216 14% 16%;
+    --bg-elevated: 216 14% 22%;
+
+    --sidebar-background: 215 25% 11%;
+    --sidebar-foreground: 213 27% 92%;
+    --sidebar-primary: 131 45% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 216 14% 16%;
+    --sidebar-accent-foreground: 213 27% 92%;
+    --sidebar-border: 216 14% 22%;
+    --sidebar-ring: 131 45% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Be Vietnam Pro', sans-serif;
+  }
+
+  /* Tabular nums for prices */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}

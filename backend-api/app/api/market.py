@@ -271,6 +271,17 @@ def get_top_movers(
         ]
         base = snapshot[cols].copy()
 
+        # Lọc bỏ cổ phiếu không đủ điều kiện giao dịch:
+        # - price > 0: loại cổ phiếu bị hủy niêm yết/tạm dừng
+        # - daily_change notna & > -50: loại mã có mức giảm bất thường (hủy niêm yết thường = -100%)
+        # - avg_trading_value_20d > 0: đảm bảo có thanh khoản thực sự
+        if "price" in base.columns:
+            base = base[base["price"] > 0]
+        if "daily_change" in base.columns:
+            base = base[base["daily_change"].notna() & (base["daily_change"] > -50)]
+        if "avg_trading_value_20d" in base.columns:
+            base = base[base["avg_trading_value_20d"] > 0]
+
         def _to_records(df):
             return _clean_records(df.head(top_n).to_dict(orient="records"))
 

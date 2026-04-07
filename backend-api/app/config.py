@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
 
     # Market Data
+    vnstock_api_key: str = ""
     vnstock_cache_expire_seconds: int = 300
     default_market: str = "HOSE"
 

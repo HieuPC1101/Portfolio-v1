@@ -12,8 +12,10 @@ from app.models.user import User, UserSession
 from app.schemas.user import (
     UserCreate,
     UserResponse,
+    UserUpdate,
     Token,
     RefreshTokenRequest,
+    ChangePasswordRequest,
 )
 from app.utils.auth import (
     verify_password,
@@ -233,3 +235,56 @@ def read_users_me(current_user: User = Depends(get_current_user)) -> Any:
     Get current authenticated user information.
     """
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_me(
+    update_data: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    """
+    Update current user's profile (full_name, email, username).
+    """
+    if update_data.username and update_data.username != current_user.username:
+        existing = db.query(User).filter(User.username == update_data.username).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken",
+            )
+
+    if update_data.email and update_data.email != current_user.email:
+        existing = db.query(User).filter(User.email == update_data.email).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+
+    for field, value in update_data.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Change current user's password.
+    Requires current password for verification.
+    """
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mật khẩu hiện tại không đúng",
+        )
+
+    current_user.hashed_password = get_password_hash(data.new_password)
+    db.commit()

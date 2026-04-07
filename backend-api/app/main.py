@@ -38,8 +38,7 @@ app.add_middleware(
 
 def _register_vnstock_api_key() -> None:
     """Đăng ký API key vnstock từ biến môi trường khi khởi động."""
-    import os
-    api_key = os.getenv("VNSTOCK_API_KEY")
+    api_key = settings.vnstock_api_key
     if not api_key:
         logger.warning("VNSTOCK_API_KEY không được đặt — chạy với giới hạn Guest (20 req/min).")
         return
