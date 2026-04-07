@@ -46,6 +46,16 @@ RSS_SOURCES: dict[str, list[str]] = {
         "https://tinnhanhchungkhoan.vn/rss/chung-khoan.rss",
         "https://tinnhanhchungkhoan.vn/rss/tai-chinh-ngan-hang.rss",
     ],
+    "VnEconomy": [
+        "https://vneconomy.vn/chung-khoan.rss",
+        "https://vneconomy.vn/tai-chinh.rss",
+        "https://vneconomy.vn/thi-truong.rss",
+    ],
+    "BaoDauTu": [
+        "https://baodautu.vn/chung-khoan-d6/rss",
+        "https://baodautu.vn/dau-tu-tai-chinh-d6/rss",
+        "https://baodautu.vn/kinh-doanh-d3/rss",
+    ],
 }
 
 # Mã cổ phiếu: 2-5 chữ hoa
@@ -53,28 +63,95 @@ _SYMBOL_RE = re.compile(r"\b([A-Z]{2,5})\b")
 
 # Whitelist mã phổ biến để giảm false positive
 _KNOWN_SYMBOLS = {
-    "VNM", "VCB", "HPG", "VIC", "SSI", "MWG", "FPT", "TCB", "VHM", "BID",
-    "CTG", "ACB", "MBB", "VPB", "HDB", "STB", "SHB", "TPB", "VIB", "OCB",
-    "MSN", "SAB", "GAS", "PLX", "POW", "PVD", "PVS", "REE", "GVR", "VRE",
-    "NVL", "PDR", "DXG", "KDH", "DIG", "VND", "HCM", "VCI", "SHS", "BSI",
-    "HAG", "HNG", "VGC", "BMP", "GMD", "DPM", "DCM", "FMC", "ANV", "VHC",
-    "VNI", "VN30", "VNINDEX", "HNX", "UPCOM", "HOSE",
+    "VNM",
+    "VCB",
+    "HPG",
+    "VIC",
+    "SSI",
+    "MWG",
+    "FPT",
+    "TCB",
+    "VHM",
+    "BID",
+    "CTG",
+    "ACB",
+    "MBB",
+    "VPB",
+    "HDB",
+    "STB",
+    "SHB",
+    "TPB",
+    "VIB",
+    "OCB",
+    "MSN",
+    "SAB",
+    "GAS",
+    "PLX",
+    "POW",
+    "PVD",
+    "PVS",
+    "REE",
+    "GVR",
+    "VRE",
+    "NVL",
+    "PDR",
+    "DXG",
+    "KDH",
+    "DIG",
+    "VND",
+    "HCM",
+    "VCI",
+    "SHS",
+    "BSI",
+    "HAG",
+    "HNG",
+    "VGC",
+    "BMP",
+    "GMD",
+    "DPM",
+    "DCM",
+    "FMC",
+    "ANV",
+    "VHC",
+    "VNI",
+    "VN30",
+    "VNINDEX",
+    "HNX",
+    "UPCOM",
+    "HOSE",
 }
 
 _VN_STOCK_KW = [
-    "chứng khoán", "cổ phiếu", "vn-index", "vnindex", "vn30",
-    "hose", "hnx", "upcom", "thị trường", "niêm yết",
+    "chứng khoán",
+    "cổ phiếu",
+    "vn-index",
+    "vnindex",
+    "vn30",
+    "hose",
+    "hnx",
+    "upcom",
+    "thị trường",
+    "niêm yết",
 ]
 
 _EXCLUDED_KW = [
-    "bitcoin", "ethereum", "crypto", "tiền ảo", "tiền điện tử",
-    "nasdaq", "dow jones", "s&p", "wall street", "chứng khoán mỹ",
+    "bitcoin",
+    "ethereum",
+    "crypto",
+    "tiền ảo",
+    "tiền điện tử",
+    "nasdaq",
+    "dow jones",
+    "s&p",
+    "wall street",
+    "chứng khoán mỹ",
 ]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_date(entry) -> Optional[datetime]:
     """Trích xuất datetime từ feedparser entry."""
@@ -126,7 +203,11 @@ def _fetch_rss_source(source_name: str, urls: List[str]) -> List[dict]:
                 seen_urls.add(link)
 
                 title = getattr(entry, "title", "") or ""
-                raw_summary = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+                raw_summary = (
+                    getattr(entry, "summary", "")
+                    or getattr(entry, "description", "")
+                    or ""
+                )
                 summary = BeautifulSoup(raw_summary, "html.parser").get_text(strip=True)
                 summary = summary[:500] + "..." if len(summary) > 500 else summary
 
@@ -134,17 +215,23 @@ def _fetch_rss_source(source_name: str, urls: List[str]) -> List[dict]:
                     continue
 
                 published_at = _parse_date(entry)
-                category = getattr(entry, "tags", [{}])[0].get("term") if getattr(entry, "tags", None) else None
+                category = (
+                    getattr(entry, "tags", [{}])[0].get("term")
+                    if getattr(entry, "tags", None)
+                    else None
+                )
 
-                articles.append({
-                    "title": title,
-                    "summary": summary,
-                    "url": link,
-                    "source": source_name,
-                    "published_at": published_at,
-                    "category": category,
-                    "symbols": _extract_symbols(title, summary),
-                })
+                articles.append(
+                    {
+                        "title": title,
+                        "summary": summary,
+                        "url": link,
+                        "source": source_name,
+                        "published_at": published_at,
+                        "category": category,
+                        "symbols": _extract_symbols(title, summary),
+                    }
+                )
         except Exception:
             continue
 
@@ -154,6 +241,7 @@ def _fetch_rss_source(source_name: str, urls: List[str]) -> List[dict]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def fetch_all_sources(limit: int = 50) -> List[dict]:
     """
@@ -191,20 +279,78 @@ def fetch_all_sources(limit: int = 50) -> List[dict]:
 
 def fetch_stock_news_from_sources(symbol: str, limit: int = 20) -> List[dict]:
     """
-    Fetch tất cả nguồn rồi lọc bài có nhắc đến symbol.
-    Tìm kiếm trong title, summary, và danh sách symbols đã trích xuất.
+    Fetch RSS trực tiếp và lọc bài có nhắc đến symbol trong title/summary.
+    Không dùng _is_vn_stock filter để tránh bỏ sót bài về mã cổ phiếu cụ thể.
     """
     symbol_upper = symbol.upper()
-    all_articles = fetch_all_sources(limit=200)
+    articles: List[dict] = []
+    seen_urls: set[str] = set()
 
-    matched = []
-    for art in all_articles:
-        title = (art.get("title") or "").upper()
-        summary = (art.get("summary") or "").upper()
-        symbols = art.get("symbols") or []
-        if symbol_upper in symbols or symbol_upper in title or symbol_upper in summary:
-            matched.append(art)
-        if len(matched) >= limit:
-            break
+    for source_name, urls in RSS_SOURCES.items():
+        for url in urls:
+            try:
+                resp = requests.get(url, headers=HEADERS, timeout=15)
+                resp.raise_for_status()
+                feed = feedparser.parse(resp.content)
 
-    return matched
+                for entry in feed.entries:
+                    link = getattr(entry, "link", "") or ""
+                    if not link:
+                        continue
+                    if link in seen_urls:
+                        continue
+
+                    title = getattr(entry, "title", "") or ""
+                    raw_summary = (
+                        getattr(entry, "summary", "")
+                        or getattr(entry, "description", "")
+                        or ""
+                    )
+                    summary = BeautifulSoup(raw_summary, "html.parser").get_text(
+                        strip=True
+                    )
+                    summary = summary[:500] + "..." if len(summary) > 500 else summary
+
+                    combined_lower = f"{title} {summary}".lower()
+                    if any(kw in combined_lower for kw in _EXCLUDED_KW):
+                        continue
+
+                    title_up = title.upper()
+                    summary_up = summary.upper()
+                    extracted = _extract_symbols(title, summary)
+
+                    if (
+                        symbol_upper not in title_up
+                        and symbol_upper not in summary_up
+                        and symbol_upper not in extracted
+                    ):
+                        continue
+
+                    seen_urls.add(link)
+                    published_at = _parse_date(entry)
+                    category = (
+                        getattr(entry, "tags", [{}])[0].get("term")
+                        if getattr(entry, "tags", None)
+                        else None
+                    )
+
+                    articles.append(
+                        {
+                            "title": title,
+                            "summary": summary,
+                            "url": link,
+                            "source": source_name,
+                            "published_at": published_at,
+                            "category": category,
+                            "symbols": sorted(set(extracted) | {symbol_upper}),
+                        }
+                    )
+
+            except Exception:
+                continue
+
+    articles.sort(
+        key=lambda a: a.get("published_at") or datetime.min,
+        reverse=True,
+    )
+    return articles[:limit]

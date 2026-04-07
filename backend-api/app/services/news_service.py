@@ -4,43 +4,25 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import feedparser
 import numbers
 import requests
 from bs4 import BeautifulSoup
+from sqlalchemy.orm import Session
 
+from app.repositories import news_repository as news_repo
 from app.services.news_crawler import fetch_all_sources, fetch_stock_news_from_sources
 
-# ---------------------------------------------------------------------------
-# In-memory cache (2-layer: short-term API cache)
-# ---------------------------------------------------------------------------
-_news_cache: Dict[str, Tuple[List[dict], datetime]] = {}
-_NEWS_TTL_SECONDS = 300  # 5 minutes
-
-
-def _cache_key(kind: str, identifier: str = "", category: str = "") -> str:
-    return f"{kind}:{identifier}:{category}"
-
-
-def _get_cached(key: str) -> Optional[List[dict]]:
-    entry = _news_cache.get(key)
-    if entry:
-        data, ts = entry
-        if datetime.utcnow() - ts < timedelta(seconds=_NEWS_TTL_SECONDS):
-            return data
-    return None
-
-
-def _set_cached(key: str, data: List[dict]) -> None:
-    _news_cache[key] = (data, datetime.utcnow())
+FRESHNESS_MINUTES = 30
 
 
 def _crawler_to_news_article(art: dict) -> dict:
     """Map internal crawler dict → NewsArticle schema fields."""
+    symbols = [str(symbol).upper() for symbol in (art.get("symbols") or [])]
     return {
         "title": art.get("title") or "",
         "summary": art.get("summary"),
@@ -48,8 +30,24 @@ def _crawler_to_news_article(art: dict) -> dict:
         "source": art.get("source"),
         "published_at": art.get("published_at"),
         "category": art.get("category"),
-        "symbols": art.get("symbols") or [],
+        "symbols": sorted(set(symbols)),
     }
+
+
+def _is_db_fresh(db: Session) -> bool:
+    newest_fetched = news_repo.get_newest_fetched_at(db)
+    if not newest_fetched:
+        return False
+
+    if newest_fetched.tzinfo is None:
+        newest_fetched = newest_fetched.replace(tzinfo=timezone.utc)
+    else:
+        newest_fetched = newest_fetched.astimezone(timezone.utc)
+
+    return datetime.now(timezone.utc) - newest_fetched < timedelta(
+        minutes=FRESHNESS_MINUTES
+    )
+
 
 VN_STOCK_KEYWORDS = [
     "chứng khoán",
@@ -218,7 +216,9 @@ def get_news_sentiment_styles(title: str, content: str) -> Dict[str, str]:
 class NewsService:
     """Service for fetching and normalizing market news."""
 
-    def fetch_news(self, source: str = "vnexpress", max_articles: int = 50) -> Tuple[List[dict], Optional[str], Optional[str]]:
+    def fetch_news(
+        self, source: str = "vnexpress", max_articles: int = 50
+    ) -> Tuple[List[dict], Optional[str], Optional[str]]:
         """Fetch news by source with fallback handling."""
         if source == "vnEconomy":
             items = self._scrape_vneconomy_news(max_articles)
@@ -258,7 +258,9 @@ class NewsService:
                     "Cache-Control": "no-cache",
                     "Pragma": "no-cache",
                 }
-                response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+                response = requests.get(
+                    url, headers=headers, timeout=15, allow_redirects=True
+                )
                 response.raise_for_status()
                 feed = feedparser.parse(response.content)
 
@@ -288,13 +290,19 @@ class NewsService:
                             date = format_display_date(datetime.now())
 
                         if hasattr(entry, "summary"):
-                            content = BeautifulSoup(entry.summary, "html.parser").get_text(strip=True)
+                            content = BeautifulSoup(
+                                entry.summary, "html.parser"
+                            ).get_text(strip=True)
                         elif hasattr(entry, "description"):
-                            content = BeautifulSoup(entry.description, "html.parser").get_text(strip=True)
+                            content = BeautifulSoup(
+                                entry.description, "html.parser"
+                            ).get_text(strip=True)
                         else:
                             content = "Nội dung đang được cập nhật..."
 
-                        normalized_content = content[:500] + "..." if len(content) > 500 else content
+                        normalized_content = (
+                            content[:500] + "..." if len(content) > 500 else content
+                        )
                         if not is_vietnam_stock_article(title, normalized_content):
                             continue
 
@@ -314,7 +322,9 @@ class NewsService:
                     break
 
             except requests.exceptions.HTTPError as exc:
-                last_warning = f"⚠️ Không thể tải RSS từ {source}: HTTP {exc.response.status_code}"
+                last_warning = (
+                    f"⚠️ Không thể tải RSS từ {source}: HTTP {exc.response.status_code}"
+                )
             except requests.exceptions.Timeout:
                 last_warning = f"⚠️ Timeout khi tải RSS từ {source}"
             except requests.exceptions.ConnectionError:
@@ -354,7 +364,13 @@ class NewsService:
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, "html.parser")
 
-                article_selectors = ["div.story", "div.story-item", "article.story", "div.news-item", "div.item-news"]
+                article_selectors = [
+                    "div.story",
+                    "div.story-item",
+                    "article.story",
+                    "div.news-item",
+                    "div.item-news",
+                ]
                 articles = []
                 for selector in article_selectors:
                     articles = soup.select(selector)
@@ -363,41 +379,72 @@ class NewsService:
 
                 if not articles:
                     articles = soup.find_all("a", href=True)
-                    articles = [a for a in articles if "/tin-tuc/" in a.get("href", "") or "/kinh-te/" in a.get("href", "")][: max_articles * 2]
+                    articles = [
+                        a
+                        for a in articles
+                        if "/tin-tuc/" in a.get("href", "")
+                        or "/kinh-te/" in a.get("href", "")
+                    ][: max_articles * 2]
 
                 page_news: List[dict] = []
                 for article in articles[: max_articles * 3]:
                     if len(collected_news) >= max_articles:
                         break
                     try:
-                        title_elem = article.find("h3") or article.find("h2") or article.find("a")
+                        title_elem = (
+                            article.find("h3")
+                            or article.find("h2")
+                            or article.find("a")
+                        )
                         if not title_elem:
                             continue
                         title = title_elem.get_text(strip=True)
                         if not title or len(title) < 10:
                             continue
 
-                        link_elem = article.find("a") if article.name != "a" else article
+                        link_elem = (
+                            article.find("a") if article.name != "a" else article
+                        )
                         link = link_elem.get("href", "") if link_elem else ""
                         if link and not link.startswith("http"):
                             link = f"https://vneconomy.vn{link}"
 
-                        time_elem = article.find("time") or article.find("span", class_=["time", "date", "published"])
-                        raw_date = time_elem.get_text(strip=True) if time_elem else datetime.now()
+                        time_elem = article.find("time") or article.find(
+                            "span", class_=["time", "date", "published"]
+                        )
+                        raw_date = (
+                            time_elem.get_text(strip=True)
+                            if time_elem
+                            else datetime.now()
+                        )
                         date = format_display_date(raw_date)
 
-                        desc_elem = article.find("p") or article.find("div", class_=["description", "desc", "summary"])
-                        content = desc_elem.get_text(strip=True) if desc_elem else "Đọc thêm tại vneconomy.vn"
+                        desc_elem = article.find("p") or article.find(
+                            "div", class_=["description", "desc", "summary"]
+                        )
+                        content = (
+                            desc_elem.get_text(strip=True)
+                            if desc_elem
+                            else "Đọc thêm tại vneconomy.vn"
+                        )
                         if len(content) < 20:
                             content = f"{title[:100]}... Đọc thêm tại vneconomy.vn"
 
-                        normalized_content = content[:500] + "..." if len(content) > 500 else content
-                        passes_filter = is_vietnam_stock_article(title, normalized_content)
+                        normalized_content = (
+                            content[:500] + "..." if len(content) > 500 else content
+                        )
+                        passes_filter = is_vietnam_stock_article(
+                            title, normalized_content
+                        )
                         lower_text = f"{title} {normalized_content}".lower()
                         if not passes_filter:
                             if (
-                                (link.startswith("https://vneconomy.vn/chung-khoan") or link.startswith("/chung-khoan") or "chung-khoan" in base_url.lower())
-                                and not any(excluded in lower_text for excluded in EXCLUDED_TOPIC_KEYWORDS)
+                                link.startswith("https://vneconomy.vn/chung-khoan")
+                                or link.startswith("/chung-khoan")
+                                or "chung-khoan" in base_url.lower()
+                            ) and not any(
+                                excluded in lower_text
+                                for excluded in EXCLUDED_TOPIC_KEYWORDS
                             ):
                                 passes_filter = True
                         if not passes_filter:
@@ -425,24 +472,38 @@ class NewsService:
                         if len(collected_news) + len(page_news) >= max_articles:
                             break
                         raw_href = anchor.get("href", "")
-                        if not raw_href or raw_href.startswith("javascript") or raw_href.startswith("#"):
+                        if (
+                            not raw_href
+                            or raw_href.startswith("javascript")
+                            or raw_href.startswith("#")
+                        ):
                             continue
                         if not VNECONOMY_ARTICLE_SLUG.match(raw_href):
                             continue
                         anchor_title = anchor.get_text(strip=True)
                         if not anchor_title or len(anchor_title) < 10:
                             continue
-                        link = raw_href if raw_href.startswith("http") else f"https://vneconomy.vn{raw_href}"
+                        link = (
+                            raw_href
+                            if raw_href.startswith("http")
+                            else f"https://vneconomy.vn{raw_href}"
+                        )
                         if link in seen_links:
                             continue
 
                         placeholder_content = f"Tin nhanh VnEconomy: {anchor_title}. Đọc nội dung chi tiết trên trang gốc."
-                        passes_filter = is_vietnam_stock_article(anchor_title, placeholder_content)
+                        passes_filter = is_vietnam_stock_article(
+                            anchor_title, placeholder_content
+                        )
                         if not passes_filter:
                             lower_text = anchor_title.lower()
                             if (
-                                (link.startswith("https://vneconomy.vn/chung-khoan") or raw_href.startswith("/chung-khoan") or "chung-khoan" in base_url.lower())
-                                and not any(excluded in lower_text for excluded in EXCLUDED_TOPIC_KEYWORDS)
+                                link.startswith("https://vneconomy.vn/chung-khoan")
+                                or raw_href.startswith("/chung-khoan")
+                                or "chung-khoan" in base_url.lower()
+                            ) and not any(
+                                excluded in lower_text
+                                for excluded in EXCLUDED_TOPIC_KEYWORDS
                             ):
                                 passes_filter = True
                         if not passes_filter:
@@ -527,11 +588,15 @@ class NewsService:
             seen_links.add(link)
 
             timestamp_elem = box.select_one(".cfbiznews_tt")
-            raw_timestamp = timestamp_elem.get_text(strip=True) if timestamp_elem else ""
+            raw_timestamp = (
+                timestamp_elem.get_text(strip=True) if timestamp_elem else ""
+            )
             published_dt = parse_cafebiz_datetime(raw_timestamp)
             display_date = format_display_date(published_dt)
 
-            summary_elem = box.select_one(".cfbiznews_des") or box.select_one(".cfbiznews_sapo")
+            summary_elem = box.select_one(".cfbiznews_des") or box.select_one(
+                ".cfbiznews_sapo"
+            )
             summary_text = summary_elem.get_text(strip=True) if summary_elem else ""
 
             article_text = summary_text
@@ -539,7 +604,9 @@ class NewsService:
                 detailed = fetch_article_body(link)
                 article_text = detailed or summary_text or "Đọc thêm trên CafeBiz.vn"
 
-            normalized_content = article_text[:500] + "..." if len(article_text) > 500 else article_text
+            normalized_content = (
+                article_text[:500] + "..." if len(article_text) > 500 else article_text
+            )
             if not is_vietnam_stock_article(title, normalized_content):
                 continue
 
@@ -555,47 +622,41 @@ class NewsService:
 
         return collected_news[:max_articles]
 
-
     def get_latest_news(
         self,
+        db: Session,
         limit: int = 20,
         category: Optional[str] = None,
         refresh: bool = False,
     ) -> List[dict]:
-        """Fetch latest VN stock news, with optional cache bypass."""
-        key = _cache_key("latest", category=category or "")
-        if not refresh:
-            cached = _get_cached(key)
-            if cached is not None:
-                return cached[:limit]
+        """Fetch latest VN stock news from DB with optional refresh."""
+        if not refresh and _is_db_fresh(db):
+            return news_repo.get_latest(db, limit=limit, category=category)
 
         articles = fetch_all_sources(limit=limit * 3)
-        if category:
-            cat_lower = category.lower()
-            articles = [a for a in articles if (a.get("category") or "").lower() == cat_lower]
-
-        result = [_crawler_to_news_article(a) for a in articles[:limit]]
-        _set_cached(key, result)
-        return result
+        mapped = [_crawler_to_news_article(article) for article in articles]
+        news_repo.upsert_articles(db, mapped)
+        return news_repo.get_latest(db, limit=limit, category=category)
 
     def get_stock_news(
         self,
+        db: Session,
         symbol: str,
         limit: int = 10,
         refresh: bool = False,
     ) -> List[dict]:
-        """Fetch news related to a specific stock symbol, with optional cache bypass."""
+        """Fetch stock-related news from DB with optional refresh."""
         symbol_upper = symbol.upper()
-        key = _cache_key("stock", identifier=symbol_upper)
-        if not refresh:
-            cached = _get_cached(key)
-            if cached is not None:
-                return cached[:limit]
+        if not refresh and _is_db_fresh(db):
+            cached = news_repo.get_by_symbol(db, symbol=symbol_upper, limit=limit)
+            if cached:
+                return cached
+            # DB fresh nhưng chưa có bài cho symbol này → crawl symbol-specific
 
         articles = fetch_stock_news_from_sources(symbol=symbol_upper, limit=limit)
-        result = [_crawler_to_news_article(a) for a in articles]
-        _set_cached(key, result)
-        return result
+        mapped = [_crawler_to_news_article(article) for article in articles]
+        news_repo.upsert_articles(db, mapped)
+        return news_repo.get_by_symbol(db, symbol=symbol_upper, limit=limit)
 
 
 _news_service: Optional[NewsService] = None

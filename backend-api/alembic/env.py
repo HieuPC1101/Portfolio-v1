@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import Base
 
 # Import all models to ensure they're registered with Base.metadata
-from app.models import chat, company_info, optimization, portfolio, user
+from app.models import chat, company_info, news, optimization, portfolio, user
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
