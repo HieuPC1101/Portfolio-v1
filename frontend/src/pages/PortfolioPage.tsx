@@ -4,13 +4,67 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { PercentBadge } from "@/components/common/PercentBadge";
 import { usePortfolioQuery } from "@/hooks/usePortfolioQuery";
 import { formatVND } from "@/lib/format";
-import { Plus, BarChart3 } from "lucide-react";
+import { AddStockDialog } from "@/components/portfolio/AddStockDialog";
+import { CreatePortfolioDialog } from "@/components/portfolio/CreatePortfolioDialog";
+import { DeletePortfolioDialog } from "@/components/portfolio/DeletePortfolioDialog";
+import { DeleteStockDialog } from "@/components/portfolio/DeleteStockDialog";
+import { EditPortfolioDialog } from "@/components/portfolio/EditPortfolioDialog";
+import { EditStockDialog } from "@/components/portfolio/EditStockDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { BarChart3, MoreVertical, Pencil, PieChart as PieChartIcon, Plus, Trash2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import type { PortfolioHolding, PortfolioItem } from "@/types/portfolio";
 
 const COLORS = ["hsl(131, 45%, 40%)", "hsl(210, 70%, 55%)", "hsl(40, 65%, 65%)", "hsl(280, 50%, 63%)", "hsl(187, 45%, 55%)"];
 
 export default function PortfolioPage() {
+  const navigate = useNavigate();
   const { data, isPending, isError } = usePortfolioQuery();
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(null);
+  const [isEditPortfolioOpen, setIsEditPortfolioOpen] = useState(false);
+  const [isDeletePortfolioOpen, setIsDeletePortfolioOpen] = useState(false);
+  const [isAddStockOpen, setIsAddStockOpen] = useState(false);
+  const [isEditStockOpen, setIsEditStockOpen] = useState(false);
+  const [isDeleteStockOpen, setIsDeleteStockOpen] = useState(false);
+  const [editingPortfolio, setEditingPortfolio] = useState<PortfolioItem | null>(null);
+  const [deletingPortfolio, setDeletingPortfolio] = useState<PortfolioItem | null>(null);
+  const [editingStock, setEditingStock] = useState<PortfolioHolding | null>(null);
+  const [deletingStock, setDeletingStock] = useState<PortfolioHolding | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("portfolio:selected-id");
+    if (stored) {
+      setSelectedPortfolioId(stored);
+    }
+  }, []);
+
+  const portfolios = data?.portfolios ?? [];
+
+  useEffect(() => {
+    if (portfolios.length === 0) {
+      setSelectedPortfolioId(null);
+      localStorage.removeItem("portfolio:selected-id");
+      return;
+    }
+
+    if (!selectedPortfolioId || !portfolios.some((portfolio) => portfolio.id === selectedPortfolioId)) {
+      const nextId = portfolios[0].id;
+      setSelectedPortfolioId(nextId);
+      localStorage.setItem("portfolio:selected-id", nextId);
+    }
+  }, [portfolios, selectedPortfolioId]);
+
+  const selected = useMemo(
+    () => portfolios.find((portfolio) => portfolio.id === selectedPortfolioId) ?? portfolios[0],
+    [portfolios, selectedPortfolioId],
+  );
 
   if (isPending) {
     return (
@@ -24,13 +78,45 @@ export default function PortfolioPage() {
     return <div className="text-sm text-muted-foreground">Không thể tải dữ liệu.</div>;
   }
 
-  const selected = data.portfolios[0];
-
   if (!selected) {
-    return <div className="text-sm text-muted-foreground">Chưa có danh mục nào.</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Danh mục đầu tư</h1>
+            <p className="text-muted-foreground text-sm mt-1">Quản lý các danh mục cổ phiếu</p>
+          </div>
+          <CreatePortfolioDialog triggerLabel="Tạo danh mục" />
+        </div>
+
+        <Card className="border-dashed border-border">
+          <CardContent className="py-16 flex flex-col items-center text-center gap-4">
+            <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <PieChartIcon className="h-8 w-8" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold">Bạn chưa có danh mục nào</h2>
+              <p className="text-sm text-muted-foreground">
+                Tạo danh mục đầu tư để theo dõi hiệu suất cổ phiếu của bạn.
+              </p>
+            </div>
+            <CreatePortfolioDialog triggerLabel="Tạo danh mục đầu tiên" />
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const pieData = selected.holdings.map((h) => ({ name: h.symbol, value: h.weight }));
+
+  function handleSelectPortfolio(id: string) {
+    setSelectedPortfolioId(id);
+    localStorage.setItem("portfolio:selected-id", id);
+  }
+
+  function handleCreatedPortfolio(id: string) {
+    handleSelectPortfolio(id);
+  }
 
   return (
     <div className="space-y-6">
@@ -39,21 +125,60 @@ export default function PortfolioPage() {
           <h1 className="text-2xl font-bold">Danh mục đầu tư</h1>
           <p className="text-muted-foreground text-sm mt-1">Quản lý các danh mục cổ phiếu</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" /> Tạo danh mục
-        </Button>
+        <CreatePortfolioDialog triggerLabel="Tạo danh mục" onCreated={handleCreatedPortfolio} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data.portfolios.map((p) => (
-          <Card key={p.id} className={`bg-card border-border cursor-pointer transition-colors hover:border-primary/50 ${p.id === selected.id ? "border-primary" : ""}`}>
+        {portfolios.map((p) => (
+          <Card
+            key={p.id}
+            onClick={() => handleSelectPortfolio(p.id)}
+            className={`bg-card border-border cursor-pointer transition-colors hover:border-primary/50 ${p.id === selected.id ? "border-primary" : ""}`}
+          >
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold">{p.name}</h3>
                   <p className="text-2xl font-bold mt-1">{formatVND(p.currentValue)}</p>
                 </div>
-                <PercentBadge value={p.pnlPercent} />
+                <div className="flex items-center gap-2">
+                  <PercentBadge value={p.pnlPercent} />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSelectPortfolio(p.id);
+                          setEditingPortfolio(p);
+                          setIsEditPortfolioOpen(true);
+                        }}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" /> Sửa
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSelectPortfolio(p.id);
+                          setDeletingPortfolio(p);
+                          setIsDeletePortfolioOpen(true);
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Xóa
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
               <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
                 <span>Đầu tư: {formatVND(p.totalInvested)}</span>
@@ -62,6 +187,7 @@ export default function PortfolioPage() {
                   {formatVND(p.pnl)}
                 </span>
               </div>
+              {p.description && <p className="mt-2 text-xs text-muted-foreground">{p.description}</p>}
               <div className="flex gap-1 mt-3">
                 {p.holdings.map((h) => (
                   <span key={h.symbol} className="text-xs px-2 py-0.5 bg-accent rounded">{h.symbol}</span>
@@ -77,10 +203,20 @@ export default function PortfolioPage() {
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-base">{selected.name} — Cổ phiếu</CardTitle>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="gap-1 text-xs">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 text-xs"
+                onClick={() => navigate(`/toi-uu?portfolioId=${selected.id}`)}
+              >
                 <BarChart3 className="h-3 w-3" /> Tối ưu hóa
               </Button>
-              <Button size="sm" variant="ghost" className="gap-1 text-xs">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1 text-xs"
+                onClick={() => setIsAddStockOpen(true)}
+              >
                 <Plus className="h-3 w-3" /> Thêm
               </Button>
             </div>
@@ -96,6 +232,7 @@ export default function PortfolioPage() {
                     <th className="text-right py-2 font-medium">Giá TT</th>
                     <th className="text-right py-2 font-medium">Lãi/Lỗ</th>
                     <th className="text-right py-2 font-medium">%</th>
+                    <th className="text-right py-2 font-medium">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -104,8 +241,16 @@ export default function PortfolioPage() {
                       const pnl = (h.currentPrice - h.avgPrice) * h.shares;
                       const pnlPct = ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100;
                       return (
-                        <tr key={h.symbol} className="border-b border-border/50 hover:bg-accent/50">
-                          <td className="py-2.5 font-semibold">{h.symbol}</td>
+                        <tr key={h.id} className="border-b border-border/50 hover:bg-accent/50">
+                          <td className="py-2.5 font-semibold">
+                            <button
+                              type="button"
+                              className="hover:text-primary transition-colors"
+                              onClick={() => navigate(`/co-phieu/${h.symbol}`)}
+                            >
+                              {h.symbol}
+                            </button>
+                          </td>
                           <td className="text-right tabular-nums">{h.shares.toLocaleString("vi-VN")}</td>
                           <td className="text-right tabular-nums">{h.avgPrice.toLocaleString("vi-VN")}</td>
                           <td className="text-right tabular-nums">{h.currentPrice.toLocaleString("vi-VN")}</td>
@@ -116,12 +261,38 @@ export default function PortfolioPage() {
                           <td className="text-right">
                             <PercentBadge value={pnlPct} showIcon={false} />
                           </td>
+                          <td className="text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setEditingStock(h);
+                                  setIsEditStockOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeletingStock(h);
+                                  setIsDeleteStockOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td className="py-3 text-sm text-muted-foreground" colSpan={6}>
+                      <td className="py-3 text-sm text-muted-foreground" colSpan={7}>
                         Chưa có cổ phiếu trong danh mục.
                       </td>
                     </tr>
@@ -180,6 +351,54 @@ export default function PortfolioPage() {
           </CardContent>
         </Card>
       </div>
+
+      <EditPortfolioDialog
+        portfolio={editingPortfolio}
+        open={isEditPortfolioOpen}
+        onOpenChange={(open) => {
+          setIsEditPortfolioOpen(open);
+          if (!open) {
+            setEditingPortfolio(null);
+          }
+        }}
+      />
+      <DeletePortfolioDialog
+        portfolio={deletingPortfolio}
+        open={isDeletePortfolioOpen}
+        onOpenChange={(open) => {
+          setIsDeletePortfolioOpen(open);
+          if (!open) {
+            setDeletingPortfolio(null);
+          }
+        }}
+      />
+      <AddStockDialog
+        portfolioId={selected.id}
+        open={isAddStockOpen}
+        onOpenChange={setIsAddStockOpen}
+      />
+      <EditStockDialog
+        portfolioId={selected.id}
+        stock={editingStock}
+        open={isEditStockOpen}
+        onOpenChange={(open) => {
+          setIsEditStockOpen(open);
+          if (!open) {
+            setEditingStock(null);
+          }
+        }}
+      />
+      <DeleteStockDialog
+        portfolioId={selected.id}
+        stock={deletingStock}
+        open={isDeleteStockOpen}
+        onOpenChange={(open) => {
+          setIsDeleteStockOpen(open);
+          if (!open) {
+            setDeletingStock(null);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { usePortfolioQuery } from "@/hooks/usePortfolioQuery";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { Play, X, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +12,30 @@ import { useOptimizeData } from "@/hooks/useOptimizeData";
 import { formatVND } from "@/lib/format";
 
 export default function OptimizePage() {
+  const [searchParams] = useSearchParams();
+  const { data: portfolioData } = usePortfolioQuery();
   const { data, isPending, isError } = useOptimizeData();
   const [selectedAlgo, setSelectedAlgo] = useState("max_sharpe");
-  const [selectedStocks, setSelectedStocks] = useState(["VCB", "FPT", "VNM", "HPG", "MWG"]);
+  const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
+
+  const portfolioId = searchParams.get("portfolioId");
+  const selectedPortfolio = useMemo(
+    () => portfolioData?.portfolios.find((portfolio) => portfolio.id === portfolioId),
+    [portfolioData?.portfolios, portfolioId],
+  );
+
+  const suggestedStocks = useMemo(
+    () => selectedPortfolio?.holdings.map((holding) => holding.symbol) ?? ["VCB", "FPT", "VNM", "HPG", "MWG"],
+    [selectedPortfolio],
+  );
+
+  useEffect(() => {
+    if (selectedPortfolio) {
+      setSelectedStocks(suggestedStocks);
+    }
+  }, [selectedPortfolio, suggestedStocks]);
+
+  const displayStocks = selectedStocks.length > 0 ? selectedStocks : suggestedStocks;
 
   const algorithms = data?.algorithms ?? [];
   const result = data?.result;
@@ -21,7 +44,11 @@ export default function OptimizePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Tối ưu hóa danh mục</h1>
-        <p className="text-muted-foreground text-sm mt-1">Chạy thuật toán phân bổ tài sản tối ưu</p>
+        <p className="text-muted-foreground text-sm mt-1">
+          {selectedPortfolio
+            ? `Đang tối ưu: ${selectedPortfolio.name}`
+            : "Chạy thuật toán phân bổ tài sản tối ưu"}
+        </p>
       </div>
 
       <Card className="bg-card border-border">
@@ -29,7 +56,7 @@ export default function OptimizePage() {
           <div>
             <Label className="text-sm font-semibold mb-3 block">1. Chọn cổ phiếu</Label>
             <div className="flex flex-wrap gap-2 mb-2">
-              {selectedStocks.map((s) => (
+              {displayStocks.map((s) => (
                 <span key={s} className="inline-flex items-center gap-1 bg-primary/15 text-primary rounded-full px-3 py-1 text-sm font-medium">
                   {s}
                   <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() => setSelectedStocks((prev) => prev.filter((x) => x !== s))} />

@@ -8,6 +8,15 @@ vi.mock("@/config/env", () => ({
   MOCK_DELAY_MS: 0,
 }));
 
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
+
 describe("PortfolioPage", () => {
   it("render portfolio và một dòng holding", async () => {
     renderWithProviders(<PortfolioPage />);
@@ -15,5 +24,7 @@ describe("PortfolioPage", () => {
     expect(await screen.findByText("Danh mục đầu tư")).toBeInTheDocument();
     expect(await screen.findByText("Danh mục chính")).toBeInTheDocument();
     expect(screen.getAllByText("VCB").length).toBeGreaterThan(0);
+    expect(screen.getByText("Tạo danh mục")).toBeInTheDocument();
+    expect(screen.getByText("Thêm")).toBeInTheDocument();
   });
 });

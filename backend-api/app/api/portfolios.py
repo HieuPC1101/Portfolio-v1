@@ -37,14 +37,13 @@ def create_portfolio(
 
     - **name**: Portfolio name
     - **description**: Optional description
-    - **initial_capital**: Starting capital amount
+    - **total_investment**: Starting invested capital amount
     """
     portfolio = Portfolio(
         user_id=current_user.id,
         name=portfolio_data.name,
         description=portfolio_data.description,
-        initial_capital=portfolio_data.initial_capital,
-        current_value=portfolio_data.initial_capital,
+        total_investment=portfolio_data.total_investment or 0,
     )
 
     db.add(portfolio)
@@ -180,7 +179,7 @@ def add_stock_to_portfolio(
     Add a stock to a portfolio.
 
     - **symbol**: Stock ticker symbol
-    - **quantity**: Number of shares
+    - **shares**: Number of shares
     - **purchase_price**: Price per share at purchase
     """
     # Verify portfolio ownership
@@ -207,13 +206,26 @@ def add_stock_to_portfolio(
 
     if existing_stock:
         # Update existing position
-        existing_stock.quantity += stock_data.quantity
+        existing_shares = existing_stock.shares
+        incoming_shares = stock_data.shares
+
+        existing_price = float(existing_stock.purchase_price or 0)
+        incoming_price = float(stock_data.purchase_price or 0)
+
+        total_shares = existing_shares + incoming_shares
+
+        if total_shares <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Total shares must be greater than 0",
+            )
+
         # Recalculate average purchase price
-        total_cost = (existing_stock.quantity * existing_stock.purchase_price) + (
-            stock_data.quantity * stock_data.purchase_price
+        total_cost = (existing_shares * existing_price) + (
+            incoming_shares * incoming_price
         )
-        existing_stock.quantity += stock_data.quantity
-        existing_stock.purchase_price = total_cost / existing_stock.quantity
+        existing_stock.shares = total_shares
+        existing_stock.purchase_price = total_cost / total_shares
 
         db.commit()
         db.refresh(existing_stock)
@@ -223,7 +235,7 @@ def add_stock_to_portfolio(
     stock = PortfolioStock(
         portfolio_id=portfolio_id,
         symbol=stock_data.symbol,
-        quantity=stock_data.quantity,
+        shares=stock_data.shares,
         purchase_price=stock_data.purchase_price,
     )
 
@@ -275,7 +287,7 @@ def update_portfolio_stock(
     """
     Update a stock position in a portfolio.
 
-    Can update quantity and purchase price.
+    Can update shares and purchase price.
     """
     # Verify portfolio ownership
     portfolio = (
