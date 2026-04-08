@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import {
   Dialog,
@@ -14,8 +13,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { searchStocks } from "@/repositories/marketRepository";
 import { useAddStock } from "@/hooks/useAddStock";
+import { StockAutocomplete } from "@/components/portfolio/StockAutocomplete";
 
 const formSchema = z.object({
   symbol: z.string().trim().min(1, "Mã cổ phiếu là bắt buộc").max(10).transform((value) => value.toUpperCase()),
@@ -57,13 +56,16 @@ export function AddStockDialog({ portfolioId, open, onOpenChange }: AddStockDial
     setSearchValue(symbolValue ?? "");
   }, [symbolValue]);
 
-  const debouncedQuery = useMemo(() => searchValue.trim(), [searchValue]);
-
-  const { data: stockOptions, isFetching } = useQuery({
-    queryKey: ["stock-search-dialog", debouncedQuery],
-    queryFn: () => searchStocks(debouncedQuery, 6),
-    enabled: debouncedQuery.length >= 1,
-  });
+  useEffect(() => {
+    if (!open) {
+      setSearchValue("");
+      reset({
+        symbol: "",
+        shares: 100,
+        purchasePrice: 10000,
+      });
+    }
+  }, [open, reset]);
 
   async function onSubmit(values: FormValues) {
     if (!portfolioId) {
@@ -96,34 +98,23 @@ export function AddStockDialog({ portfolioId, open, onOpenChange }: AddStockDial
 
           <div className="space-y-1.5">
             <Label htmlFor="add-stock-symbol">Mã cổ phiếu</Label>
-            <Input
-              id="add-stock-symbol"
-              placeholder="Ví dụ: FPT"
+            <StockAutocomplete
+              inputId="add-stock-symbol"
               value={searchValue}
-              onChange={(event) => {
-                const nextValue = event.target.value.toUpperCase();
+              onValueChange={(nextValue) => {
                 setSearchValue(nextValue);
                 setValue("symbol", nextValue, { shouldValidate: true });
               }}
+              onSelect={(stock) => {
+                setSearchValue(stock.symbol);
+                setValue("symbol", stock.symbol, { shouldValidate: true });
+
+                if (typeof stock.price === "number" && stock.price > 0) {
+                  setValue("purchasePrice", stock.price, { shouldValidate: true });
+                }
+              }}
+              placeholder="Ví dụ: FPT hoặc Vinamilk"
             />
-            {isFetching && <p className="text-xs text-muted-foreground">Đang tìm kiếm mã cổ phiếu...</p>}
-            {stockOptions && stockOptions.length > 0 && searchValue.trim().length > 0 && (
-              <div className="rounded-md border border-border max-h-40 overflow-y-auto">
-                {stockOptions.map((option) => (
-                  <button
-                    key={`${option.symbol}-${option.exchange ?? "na"}`}
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
-                    onClick={() => {
-                      setSearchValue(option.symbol);
-                      setValue("symbol", option.symbol, { shouldValidate: true });
-                    }}
-                  >
-                    [{option.symbol}] {option.name ?? "Không có tên"}
-                  </button>
-                ))}
-              </div>
-            )}
             {errors.symbol && <p className="text-xs text-destructive">{errors.symbol.message}</p>}
           </div>
 
@@ -135,7 +126,7 @@ export function AddStockDialog({ portfolioId, open, onOpenChange }: AddStockDial
 
           <div className="space-y-1.5">
             <Label htmlFor="add-stock-price">Giá mua (VND)</Label>
-            <Input id="add-stock-price" type="number" min={1} step={100} {...register("purchasePrice")} />
+            <Input id="add-stock-price" type="number" min={0} step={100} {...register("purchasePrice")} />
             {errors.purchasePrice && (
               <p className="text-xs text-destructive">{errors.purchasePrice.message}</p>
             )}

@@ -83,7 +83,7 @@ def run_optimization(
             weights=result.get("weights", {}),
             shares=result.get("shares", {}),
             leftover_cash=result.get("leftover_cash"),
-            extra_data=result.get("raw_result"),
+            extra_data=result.get("extra_data") or result.get("raw_result"),
         )
 
         db.add(optimization_run)
@@ -313,13 +313,13 @@ def list_optimization_models(current_user: User = Depends(get_current_user)) -> 
             {
                 "id": "markowitz",
                 "name": "Mean-Variance Optimization (Markowitz)",
-                "description": "Classic portfolio optimization balancing expected return and risk",
+                "description": "Minimize variance while meeting a user-defined target return",
                 "risk_metric": "Variance/Volatility",
             },
             {
                 "id": "max_sharpe",
                 "name": "Maximum Sharpe Ratio",
-                "description": "Maximize risk-adjusted returns (Sharpe ratio)",
+                "description": "Maximize risk-adjusted returns with a user-defined risk-free rate",
                 "risk_metric": "Volatility",
             },
             {

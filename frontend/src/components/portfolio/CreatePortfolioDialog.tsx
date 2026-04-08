@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreatePortfolio } from "@/hooks/useCreatePortfolio";
+import { formatCurrencyInput, parseCurrencyInput } from "@/utils/formatters";
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Tên danh mục là bắt buộc").max(100, "Tối đa 100 ký tự"),
@@ -38,11 +39,13 @@ export function CreatePortfolioDialog({
   onCreated,
 }: CreatePortfolioDialogProps) {
   const [open, setOpen] = useState(false);
+  const [totalInvestmentInput, setTotalInvestmentInput] = useState(() => formatCurrencyInput(100000000));
   const createPortfolioMutation = useCreatePortfolio();
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
     reset,
   } = useForm<FormValues>({
@@ -63,6 +66,7 @@ export function CreatePortfolioDialog({
 
     onCreated?.(created.id);
     reset();
+    setTotalInvestmentInput(formatCurrencyInput(100000000));
     setOpen(false);
   }
 
@@ -82,6 +86,8 @@ export function CreatePortfolioDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <input type="hidden" {...register("totalInvestment")} />
+
           <div className="space-y-1.5">
             <Label htmlFor="portfolio-name">Tên danh mục</Label>
             <Input
@@ -109,10 +115,26 @@ export function CreatePortfolioDialog({
             <Label htmlFor="portfolio-total">Tổng vốn đầu tư (VND)</Label>
             <Input
               id="portfolio-total"
-              type="number"
-              min={1}
-              step={1000}
-              {...register("totalInvestment")}
+              type="text"
+              inputMode="numeric"
+              value={totalInvestmentInput}
+              onChange={(event) => {
+                const rawValue = event.target.value;
+                const parsedValue = parseCurrencyInput(rawValue);
+
+                if (!rawValue.trim()) {
+                  setTotalInvestmentInput("");
+                  setValue("totalInvestment", 0, { shouldDirty: true, shouldValidate: true });
+                  return;
+                }
+
+                setTotalInvestmentInput(formatCurrencyInput(parsedValue));
+                setValue("totalInvestment", parsedValue, { shouldDirty: true, shouldValidate: true });
+              }}
+              onBlur={() => {
+                const parsedValue = parseCurrencyInput(totalInvestmentInput);
+                setTotalInvestmentInput(parsedValue > 0 ? formatCurrencyInput(parsedValue) : "");
+              }}
             />
             {errors.totalInvestment && (
               <p className="text-xs text-destructive">{errors.totalInvestment.message}</p>

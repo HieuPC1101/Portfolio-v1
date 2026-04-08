@@ -7,6 +7,11 @@ interface PercentBadgeProps {
   showIcon?: boolean;
 }
 
+const PERCENT_FORMATTER = new Intl.NumberFormat("vi-VN", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export function PercentBadge({ value, className, showIcon = true }: PercentBadgeProps) {
   const isPositive = value > 0;
   const isZero = value === 0;
@@ -24,7 +29,8 @@ export function PercentBadge({ value, className, showIcon = true }: PercentBadge
       {showIcon && !isZero && (
         isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />
       )}
-      {value > 0 ? '+' : ''}{value.toFixed(2)}%
+      {value > 0 ? "+" : ""}
+      {PERCENT_FORMATTER.format(value)}%
     </span>
   );
 }

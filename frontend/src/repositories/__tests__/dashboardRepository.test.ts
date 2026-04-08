@@ -12,7 +12,9 @@ describe("getDashboardData", () => {
     const data = await getDashboardData();
 
     expect(data.indices.length).toBeGreaterThan(0);
-    expect(data.topMovers.length).toBeGreaterThan(0);
+    expect(data.topGainers.length).toBeGreaterThan(0);
+    expect(data.topLosers.length).toBeGreaterThan(0);
+    expect(data.topMostActive.length).toBeGreaterThan(0);
     expect(data.summary.portfolioCount).toBe(3);
     expect(data.summary.stockCount).toBe(12);
   });

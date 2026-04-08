@@ -2,6 +2,10 @@ export interface OptimizeMetricSummary {
   expectedReturn: number;
   volatility: number;
   sharpeRatio: number;
+  maxDrawdown?: number;
+  cvar?: number;
+  cdar?: number;
+  beta?: number;
 }
 
 export interface OptimizeAlgorithm {
@@ -38,4 +42,28 @@ export interface OptimizeResultData {
 export interface OptimizePageData {
   algorithms: OptimizeAlgorithm[];
   result: OptimizeResultData;
+}
+
+export interface OptimizeStockSearchItem {
+  symbol: string;
+  name: string | null;
+  exchange: string | null;
+  currentPrice?: number;
+}
+
+export interface OptimizationConstraints {
+  riskFreeRate?: number;
+  targetReturn?: number | null;
+  maxWeight?: number;
+  minWeight?: number;
+}
+
+export interface CalculateOptimizationPayload {
+  stocks: string[];
+  algorithm: string;
+  budget: number;
+  constraints?: OptimizationConstraints;
+  portfolioId?: number;
+  startDate?: string;
+  endDate?: string;
 }

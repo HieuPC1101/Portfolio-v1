@@ -6,6 +6,7 @@ import type { AddStockPayload } from "@/types/portfolio";
 interface AddStockArgs {
   portfolioId: string;
   payload: AddStockPayload;
+  silent?: boolean;
 }
 
 export function useAddStock() {
@@ -13,12 +14,17 @@ export function useAddStock() {
 
   return useMutation({
     mutationFn: ({ portfolioId, payload }: AddStockArgs) => addStockToPortfolio(portfolioId, payload),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
-      toast.success("Thêm cổ phiếu thành công");
+
+      if (!variables.silent) {
+        toast.success("Thêm cổ phiếu thành công");
+      }
     },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra, vui lòng thử lại");
+    onError: (error, variables) => {
+      if (!variables.silent) {
+        toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra, vui lòng thử lại");
+      }
     },
   });
 }

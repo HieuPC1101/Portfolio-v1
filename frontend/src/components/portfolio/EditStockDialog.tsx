@@ -95,7 +95,7 @@ export function EditStockDialog({ portfolioId, stock, open, onOpenChange }: Edit
 
           <div className="space-y-1.5">
             <Label htmlFor="edit-stock-price">Giá mua (VND)</Label>
-            <Input id="edit-stock-price" type="number" min={1} step={100} {...register("purchasePrice")} />
+            <Input id="edit-stock-price" type="number" min={0} step={100} {...register("purchasePrice")} />
             {errors.purchasePrice && (
               <p className="text-xs text-destructive">{errors.purchasePrice.message}</p>
             )}

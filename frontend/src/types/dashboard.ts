@@ -10,6 +10,7 @@ export interface TopMover {
   price: number;
   change: number;
   percent: number;
+  liquidity: number | null;
 }
 
 export interface DashboardChartPoint {
@@ -29,7 +30,9 @@ export interface PortfolioSummary {
 
 export interface DashboardData {
   indices: MarketIndex[];
-  topMovers: TopMover[];
+  topGainers: TopMover[];
+  topLosers: TopMover[];
+  topMostActive: TopMover[];
   chart: DashboardChartPoint[];
   summary: PortfolioSummary;
 }

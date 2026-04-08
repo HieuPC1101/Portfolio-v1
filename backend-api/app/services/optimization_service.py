@@ -28,6 +28,7 @@ class OptimizationRequest:
     prices: pd.DataFrame
     total_investment: float
     mode: str = "manual"
+    constraints: Optional[Dict[str, Any]] = None
 
 
 class OptimizationService:
@@ -37,16 +38,34 @@ class OptimizationService:
         self.market_service = get_market_data_service()
         self._latest_price_provider = self.market_service.latest_prices
         self._model_map = {
-            "markowitz": lambda d, ti: markowitz_optimization(
-                d, ti, self._latest_price_provider
+            "markowitz": lambda request: markowitz_optimization(
+                request.prices,
+                request.total_investment,
+                self._latest_price_provider,
+                target_return=self._constraint_rate(
+                    request.constraints, ["target_return", "targetReturn"]
+                ),
             ),
-            "max_sharpe": lambda d, ti: max_sharpe(d, ti, self._latest_price_provider),
-            "min_volatility": lambda d, ti: min_volatility(
-                d, ti, self._latest_price_provider
+            "max_sharpe": lambda request: max_sharpe(
+                request.prices,
+                request.total_investment,
+                self._latest_price_provider,
+                risk_free_rate=self._constraint_rate(
+                    request.constraints, ["risk_free_rate", "riskFreeRate"]
+                ),
             ),
-            "hrp": lambda d, ti: hrp_model(d, ti, self._latest_price_provider),
-            "min_cvar": lambda d, ti: min_cvar(d, ti, self._latest_price_provider),
-            "min_cdar": lambda d, ti: min_cdar(d, ti, self._latest_price_provider),
+            "min_volatility": lambda request: min_volatility(
+                request.prices, request.total_investment, self._latest_price_provider
+            ),
+            "hrp": lambda request: hrp_model(
+                request.prices, request.total_investment, self._latest_price_provider
+            ),
+            "min_cvar": lambda request: min_cvar(
+                request.prices, request.total_investment, self._latest_price_provider
+            ),
+            "min_cdar": lambda request: min_cdar(
+                request.prices, request.total_investment, self._latest_price_provider
+            ),
         }
         self._api_model_alias = {
             "markowitz": "markowitz",
@@ -80,7 +99,7 @@ class OptimizationService:
         model = self._model_map.get(model_name)
         if model is None:
             raise ValueError(f"Unsupported model: {model_name}")
-        return model(request.prices, request.total_investment)
+        return model(request)
 
     def optimize_portfolio(
         self,
@@ -118,15 +137,23 @@ class OptimizationService:
         canonical_model = self._api_model_alias.get(model, str(model).lower())
         model_result = self.run_model(
             canonical_model,
-            OptimizationRequest(prices=price_data, total_investment=total_investment),
+            OptimizationRequest(
+                prices=price_data,
+                total_investment=total_investment,
+                constraints=constraints,
+            ),
         )
         if not model_result:
             raise ValueError("Optimization returned empty result")
 
+        weights = self._as_float_dict(model_result.get("Trọng số danh mục", {}))
+        shares = self._as_int_dict(model_result.get("Số mã cổ phiếu cần mua", {}))
+        normalized_extra_data = self._build_extra_data(model_result, shares)
+
         return {
             "model": canonical_model,
-            "weights": self._as_float_dict(model_result.get("Trọng số danh mục", {})),
-            "shares": self._as_int_dict(model_result.get("Số mã cổ phiếu cần mua", {})),
+            "weights": weights,
+            "shares": shares,
             "expected_return": self._as_float(model_result.get("Lợi nhuận kỳ vọng")),
             "expected_volatility": self._as_float(
                 model_result.get("Rủi ro (Độ lệch chuẩn)")
@@ -134,6 +161,7 @@ class OptimizationService:
             "sharpe_ratio": self._as_float(model_result.get("Tỷ lệ Sharpe")),
             "leftover_cash": self._as_float(model_result.get("Số tiền còn lại")),
             "skipped_symbols": skipped,
+            "extra_data": normalized_extra_data,
             "raw_result": self._to_jsonable(model_result),
         }
 
@@ -283,6 +311,60 @@ class OptimizationService:
             except Exception:
                 continue
         return output
+
+    @classmethod
+    def _constraint_rate(
+        cls, constraints: Optional[Dict[str, Any]], keys: list[str]
+    ) -> Optional[float]:
+        if not isinstance(constraints, dict):
+            return None
+
+        for key in keys:
+            value = constraints.get(key)
+            if value is None:
+                continue
+
+            numeric_value = cls._as_float(value)
+            if numeric_value is None or not np.isfinite(numeric_value):
+                continue
+
+            return numeric_value / 100 if abs(numeric_value) > 1 else numeric_value
+
+        return None
+
+    @classmethod
+    def _build_extra_data(
+        cls, model_result: Dict[str, Any], shares: Dict[str, int]
+    ) -> Dict[str, Any]:
+        latest_prices = cls._as_float_dict(model_result.get("Giá mã cổ phiếu", {}))
+        allocation_amounts = {
+            symbol: float(quantity * latest_prices[symbol])
+            for symbol, quantity in shares.items()
+            if symbol in latest_prices
+        }
+
+        extra_data: Dict[str, Any] = {
+            "latest_prices": latest_prices,
+            "allocation_amounts": allocation_amounts,
+        }
+
+        cvar = cls._as_float(model_result.get("Rủi ro CVaR"))
+        if cvar is not None:
+            extra_data["cvar"] = cvar
+
+        cdar = cls._as_float(model_result.get("Rủi ro CDaR"))
+        if cdar is not None:
+            extra_data["cdar"] = cdar
+
+        target_return = cls._as_float(model_result.get("target_return"))
+        if target_return is not None:
+            extra_data["target_return"] = target_return
+
+        risk_free_rate = cls._as_float(model_result.get("risk_free_rate"))
+        if risk_free_rate is not None:
+            extra_data["risk_free_rate"] = risk_free_rate
+
+        return extra_data
 
     @classmethod
     def _series_to_dict(cls, series: pd.Series) -> Dict[str, float]:

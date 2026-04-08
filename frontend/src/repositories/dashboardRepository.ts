@@ -34,6 +34,7 @@ interface BackendMover {
   ticker: string;
   price: number;
   daily_change: number;
+  avg_trading_value_20d?: number | null;
 }
 
 function isActiveMover(stock: BackendMover): boolean {
@@ -43,6 +44,27 @@ function isActiveMover(stock: BackendMover): boolean {
 interface BackendTopMovers {
   gainers: BackendMover[];
   losers: BackendMover[];
+  most_active: BackendMover[];
+}
+
+function parseLiquidity(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
+}
+
+function mapMover(stock: BackendMover): TopMover {
+  const percent = Number.isFinite(stock.daily_change) ? stock.daily_change : 0;
+
+  return {
+    symbol: stock.ticker,
+    price: stock.price,
+    change: parseFloat(((stock.price * percent) / 100).toFixed(0)),
+    percent,
+    liquidity: parseLiquidity(stock.avg_trading_value_20d),
+  };
 }
 
 interface BackendPortfolio {
@@ -116,13 +138,17 @@ async function getLiveDashboardData(): Promise<DashboardData> {
       value: point.close,
     }));
 
-  const allMovers = [...moversRaw.gainers, ...moversRaw.losers].filter(isActiveMover);
-  const topMovers: TopMover[] = allMovers.map((stock) => ({
-    symbol: stock.ticker,
-    price: stock.price,
-    change: parseFloat((stock.price * stock.daily_change / 100).toFixed(0)),
-    percent: stock.daily_change,
-  }));
+  const topGainers: TopMover[] = (moversRaw.gainers ?? [])
+    .filter(isActiveMover)
+    .map(mapMover);
+
+  const topLosers: TopMover[] = (moversRaw.losers ?? [])
+    .filter(isActiveMover)
+    .map(mapMover);
+
+  const topMostActive: TopMover[] = (moversRaw.most_active ?? [])
+    .filter(isActiveMover)
+    .map(mapMover);
 
   const totalInvested = portfoliosRaw.reduce((sum, portfolio) => sum + Number(portfolio.total_investment), 0);
   const summary: PortfolioSummary = {
@@ -134,7 +160,7 @@ async function getLiveDashboardData(): Promise<DashboardData> {
     stockCount: portfoliosRaw.reduce((sum, portfolio) => sum + portfolio.stocks.length, 0),
   };
 
-  return { indices, topMovers, chart, summary };
+  return { indices, topGainers, topLosers, topMostActive, chart, summary };
 }
 
 export async function getDashboardData(): Promise<DashboardData> {

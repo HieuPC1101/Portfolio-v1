@@ -26,6 +26,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _normalize_rate_input(value, default):
+    """Chuẩn hóa input phần trăm về dạng số thập phân hàng năm."""
+    if value is None:
+        return default
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return default
+
+    if not np.isfinite(numeric_value):
+        return default
+
+    return numeric_value / 100 if abs(numeric_value) > 1 else numeric_value
+
+
 def _prepare_latest_price_series(tickers, latest_prices_dict, reference_prices=None):
     """Đảm bảo có giá mới nhất cho mọi mã để tránh lỗi shape mismatch."""
     if not tickers:
@@ -313,7 +329,9 @@ def run_integer_programming(weights, latest_prices, total_portfolio_value):
     return allocation_lp, leftover_lp
 
 
-def markowitz_optimization(price_data, total_investment, get_latest_prices_func):
+def markowitz_optimization(
+    price_data, total_investment, get_latest_prices_func, target_return=None
+):
     """
     Mô hình Markowitz: Tối ưu hóa giữa lợi nhuận và rủi ro.
 
@@ -327,93 +345,82 @@ def markowitz_optimization(price_data, total_investment, get_latest_prices_func)
     """
     logger.info(f"[MARKOWITZ] Nhan total_investment: {total_investment:,.0f} VND")
 
-    # Tiền xử lý dữ liệu giá để đảm bảo là số và có đủ quan sát
-    cleaned_prices = price_data.copy()
-    cleaned_prices = cleaned_prices.apply(pd.to_numeric, errors="coerce")
-    cleaned_prices = cleaned_prices.ffill().bfill()
-    cleaned_prices = cleaned_prices.dropna(axis=1, how="all")
+    try:
+        cleaned_prices = price_data.copy()
+        cleaned_prices = cleaned_prices.apply(pd.to_numeric, errors="coerce")
+        cleaned_prices = cleaned_prices.ffill().bfill()
+        cleaned_prices = cleaned_prices.dropna(axis=1, how="all")
+        cleaned_prices = cleaned_prices.loc[
+            :, cleaned_prices.apply(lambda col: col.notna().sum() >= 2)
+        ]
 
-    # Loại bỏ cột không đủ dữ liệu (ít hơn 2 quan sát hữu ích)
-    cleaned_prices = cleaned_prices.loc[
-        :, cleaned_prices.apply(lambda col: col.notna().sum() >= 2)
-    ]
+        if cleaned_prices.empty or cleaned_prices.shape[0] < 2:
+            logger.error("Du lieu gia khong hop le hoac khong du quan sat de tinh toan")
+            logger.error("Khong du du lieu gia hop le de chay mo hinh Markowitz")
+            return None
 
-    if cleaned_prices.empty or cleaned_prices.shape[0] < 2:
-        logger.error("Du lieu gia khong hop le hoac khong du quan sat de tinh toan")
-        logger.error("Khong du du lieu gia hop le de chay mo hinh Markowitz")
+        tickers = cleaned_prices.columns.tolist()
+        if not tickers:
+            logger.error("Danh sach ma ma co phieu da chon khong hop le")
+            return None
+
+        mean_returns = expected_returns.mean_historical_return(cleaned_prices)
+        cov_matrix = risk_models.sample_cov(cleaned_prices)
+
+        target_return_value = _normalize_rate_input(target_return, None)
+        if target_return_value is None:
+            target_return_value = float(mean_returns.mean())
+
+        min_return = float(mean_returns.min())
+        max_return = float(mean_returns.max())
+        if target_return_value > max_return:
+            target_return_value = max_return
+        if target_return_value < min_return:
+            target_return_value = min_return
+
+        ef = EfficientFrontier(mean_returns, cov_matrix)
+        ef.efficient_return(target_return=target_return_value)
+        performance = ef.portfolio_performance(verbose=False)
+        cleaned_weights = ef.clean_weights()
+
+        total_weight = sum(cleaned_weights.values())
+        if abs(total_weight - 1.0) > 1e-5:
+            logger.warning(
+                f"[MARKOWITZ] Tong trong so truoc khi chuan hoa: {total_weight}"
+            )
+            cleaned_weights = {
+                k: v / total_weight for k, v in cleaned_weights.items() if v > 1e-5
+            }
+
+        latest_prices = get_latest_prices_func(tickers)
+        latest_prices_series = _prepare_latest_price_series(
+            tickers, latest_prices, cleaned_prices
+        )
+
+        logger.info(
+            f"[MARKOWITZ] Muc tieu loi nhuan nam hoa: {target_return_value:.4f}"
+        )
+        allocation_lp, leftover_lp = run_integer_programming(
+            cleaned_weights, latest_prices_series, total_investment
+        )
+
+        return {
+            "Trọng số danh mục": cleaned_weights,
+            "Lợi nhuận kỳ vọng": performance[0],
+            "Rủi ro (Độ lệch chuẩn)": performance[1],
+            "Tỷ lệ Sharpe": performance[2],
+            "Số mã cổ phiếu cần mua": allocation_lp,
+            "Số tiền còn lại": leftover_lp,
+            "Giá mã cổ phiếu": latest_prices_series.to_dict(),
+            "target_return": target_return_value,
+        }
+    except Exception as e:
+        logger.error(f"Loi trong mo hinh Markowitz: {e}")
+        print(f"Lỗi trong mô hình Markowitz: {e}")
         return None
 
-    tickers = cleaned_prices.columns.tolist()
-    num_assets = len(tickers)
 
-    if num_assets == 0:
-        logger.error("Danh sach ma ma co phieu da chon khong hop le")
-        print("Danh sách mã cổ phiếu đã chọn không hợp lệ. Vui lòng kiểm tra lại.")
-        return None
-
-    log_ret = np.log(cleaned_prices / cleaned_prices.shift(1)).dropna()
-    n_portfolios = 10000
-    all_weights = np.zeros((n_portfolios, num_assets))
-    ret_arr = np.zeros(n_portfolios)
-    vol_arr = np.zeros(n_portfolios)
-    sharpe_arr = np.zeros(n_portfolios)
-
-    mean_returns = log_ret.mean() * 252  # Lợi nhuận kỳ vọng hàng năm
-    cov_matrix = log_ret.cov() * 252  # Ma trận hiệp phương sai hàng năm
-
-    np.random.seed(42)  # Thiết lập giá trị seed để kết quả ổn định
-
-    for i in range(n_portfolios):
-        weights = np.random.random(num_assets)
-        weights /= np.sum(weights)
-        all_weights[i, :] = weights
-
-        rf = 0.02
-        ret_arr[i] = np.dot(mean_returns, weights)
-        vol_arr[i] = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-        sharpe_arr[i] = (ret_arr[i] - rf) / vol_arr[i]
-
-    max_sharpe_idx = sharpe_arr.argmax()
-    optimal_weights = all_weights[max_sharpe_idx]
-
-    weight2 = dict(zip(tickers, optimal_weights))
-    latest_prices = get_latest_prices_func(tickers)
-    latest_prices_series = _prepare_latest_price_series(
-        tickers, latest_prices, cleaned_prices
-    )
-
-    logger.info(
-        f"[MARKOWITZ] Truoc khi gan total_portfolio_value: {total_investment:,.0f} VND"
-    )
-    total_portfolio_value = total_investment
-    logger.info(
-        f"[MARKOWITZ] Sau khi gan total_portfolio_value: {total_portfolio_value:,.0f} VND"
-    )
-
-    allocation_lp, leftover_lp = run_integer_programming(
-        weight2, latest_prices_series, total_portfolio_value
-    )
-
-    result = {
-        "Trọng số danh mục": dict(zip(tickers, optimal_weights)),
-        "Lợi nhuận kỳ vọng": ret_arr[max_sharpe_idx],
-        "Rủi ro (Độ lệch chuẩn)": vol_arr[max_sharpe_idx],
-        "Tỷ lệ Sharpe": sharpe_arr[max_sharpe_idx],
-        "Số mã cổ phiếu cần mua": allocation_lp,
-        "Số tiền còn lại": leftover_lp,
-        "Giá mã cổ phiếu": latest_prices_series.to_dict(),
-        # Thêm dữ liệu cho biểu đồ
-        "ret_arr": ret_arr,
-        "vol_arr": vol_arr,
-        "sharpe_arr": sharpe_arr,
-        "all_weights": all_weights,
-        "max_sharpe_idx": max_sharpe_idx,
-    }
-
-    return result
-
-
-def max_sharpe(data, total_investment, get_latest_prices_func):
+def max_sharpe(data, total_investment, get_latest_prices_func, risk_free_rate=0.02):
     """
     Mô hình Max Sharpe Ratio: Tối đa hóa tỷ lệ Sharpe.
 
@@ -431,14 +438,16 @@ def max_sharpe(data, total_investment, get_latest_prices_func):
         tickers = data.columns.tolist()
         num_assets = len(tickers)
 
+        rf = _normalize_rate_input(risk_free_rate, 0.02)
+
         # Tính toán mean returns và covariance matrix
         mean_returns = expected_returns.mean_historical_return(data)
         cov_matrix = risk_models.sample_cov(data)
 
         # Tối ưu hóa Max Sharpe
         ef = EfficientFrontier(mean_returns, cov_matrix)
-        weights = ef.max_sharpe()
-        performance = ef.portfolio_performance(verbose=False)
+        weights = ef.max_sharpe(risk_free_rate=rf)
+        performance = ef.portfolio_performance(verbose=False, risk_free_rate=rf)
         cleaned_weights = ef.clean_weights()
 
         # Đảm bảo trọng số được chuẩn hóa
@@ -466,7 +475,6 @@ def max_sharpe(data, total_investment, get_latest_prices_func):
         cov_matrix_annual = log_ret.cov() * 252
 
         np.random.seed(42)
-        rf = 0.04  # Risk-free rate 4%
 
         for i in range(n_portfolios):
             w = np.random.random(num_assets)

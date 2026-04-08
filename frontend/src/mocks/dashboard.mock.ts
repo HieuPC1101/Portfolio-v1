@@ -18,13 +18,23 @@ export const dashboardMock: DashboardData = {
     { name: "HNX-Index", value: 234.56, change: -1.23, changePercent: -0.52 },
     { name: "UPCOM", value: 92.34, change: 0.45, changePercent: 0.49 },
   ],
-  topMovers: [
-    { symbol: "VCB", price: 85400, change: 1200, percent: 1.43 },
-    { symbol: "FPT", price: 132500, change: 3500, percent: 2.71 },
-    { symbol: "HPG", price: 28350, change: -850, percent: -2.91 },
-    { symbol: "VNM", price: 72600, change: -400, percent: -0.55 },
-    { symbol: "MWG", price: 56200, change: 1800, percent: 3.31 },
-    { symbol: "TCB", price: 35700, change: 700, percent: 2.0 },
+  topGainers: [
+    { symbol: "MWG", price: 56200, change: 1800, percent: 3.31, liquidity: 175_000_000_000 },
+    { symbol: "FPT", price: 132500, change: 3500, percent: 2.71, liquidity: 145_000_000_000 },
+    { symbol: "TCB", price: 35700, change: 700, percent: 2.0, liquidity: 132_000_000_000 },
+    { symbol: "VCB", price: 85400, change: 1200, percent: 1.43, liquidity: 128_000_000_000 },
+  ],
+  topLosers: [
+    { symbol: "HPG", price: 28350, change: -850, percent: -2.91, liquidity: 160_000_000_000 },
+    { symbol: "VNM", price: 72600, change: -400, percent: -0.55, liquidity: 92_000_000_000 },
+    { symbol: "PVD", price: 25100, change: -600, percent: -2.33, liquidity: 87_500_000_000 },
+    { symbol: "GAS", price: 78100, change: -900, percent: -1.14, liquidity: 64_200_000_000 },
+  ],
+  topMostActive: [
+    { symbol: "HPG", price: 28350, change: -850, percent: -2.91, liquidity: 260_000_000_000 },
+    { symbol: "VIX", price: 18100, change: 780, percent: 4.5, liquidity: 210_000_000_000 },
+    { symbol: "SHB", price: 12200, change: 360, percent: 3.04, liquidity: 198_000_000_000 },
+    { symbol: "SSI", price: 32100, change: -350, percent: -1.08, liquidity: 176_000_000_000 },
   ],
   chart: Array.from({ length: 30 }, (_, i) => ({
     day: i + 1,

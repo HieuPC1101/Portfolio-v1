@@ -8,6 +8,8 @@ export interface StockSearchResult {
   name: string | null;
   exchange: string | null;
   sector: string | null;
+  price: number | null;
+  percent: number | null;
 }
 
 export interface StockPricePoint {
@@ -54,6 +56,8 @@ interface BackendStockSearchResult {
   name: string | null;
   exchange: string | null;
   sector: string | null;
+  price?: number | null;
+  daily_change?: number | null;
 }
 
 interface BackendStockPrice {
@@ -95,16 +99,21 @@ interface BackendSectorDetail {
 }
 
 const stockSearchMockData: StockSearchResult[] = [
-  { symbol: "FPT", name: "FPT Corporation", exchange: "HOSE", sector: "Công nghệ" },
-  { symbol: "MWG", name: "CTCP Đầu tư Thế Giới Di Động", exchange: "HOSE", sector: "Bán lẻ" },
-  { symbol: "VCB", name: "Ngân hàng TMCP Ngoại thương Việt Nam", exchange: "HOSE", sector: "Ngân hàng" },
-  { symbol: "TCB", name: "Ngân hàng TMCP Kỹ thương Việt Nam", exchange: "HOSE", sector: "Ngân hàng" },
-  { symbol: "HPG", name: "CTCP Tập đoàn Hòa Phát", exchange: "HOSE", sector: "Thép" },
-  { symbol: "SSI", name: "CTCP Chứng khoán SSI", exchange: "HOSE", sector: "Tài chính" },
-  { symbol: "VNM", name: "CTCP Sữa Việt Nam", exchange: "HOSE", sector: "Thực phẩm" },
-  { symbol: "VRE", name: "CTCP Vincom Retail", exchange: "HOSE", sector: "Bất động sản" },
-  { symbol: "ACB", name: "Ngân hàng TMCP Á Châu", exchange: "HOSE", sector: "Ngân hàng" },
-  { symbol: "MBB", name: "Ngân hàng TMCP Quân đội", exchange: "HOSE", sector: "Ngân hàng" },
+  { symbol: "FPT", name: "FPT Corporation", exchange: "HOSE", sector: "Công nghệ", price: 132500, percent: 2.71 },
+  { symbol: "MWG", name: "CTCP Đầu tư Thế Giới Di Động", exchange: "HOSE", sector: "Bán lẻ", price: 56200, percent: 3.31 },
+  { symbol: "VCB", name: "Ngân hàng TMCP Ngoại thương Việt Nam", exchange: "HOSE", sector: "Ngân hàng", price: 85400, percent: 1.43 },
+  { symbol: "TCB", name: "Ngân hàng TMCP Kỹ thương Việt Nam", exchange: "HOSE", sector: "Ngân hàng", price: 35700, percent: 2 },
+  { symbol: "HPG", name: "CTCP Tập đoàn Hòa Phát", exchange: "HOSE", sector: "Thép", price: 28350, percent: -2.91 },
+  { symbol: "SSI", name: "CTCP Chứng khoán SSI", exchange: "HOSE", sector: "Tài chính", price: 32100, percent: -2.13 },
+  { symbol: "VNM", name: "CTCP Sữa Việt Nam", exchange: "HOSE", sector: "Thực phẩm", price: 72600, percent: -0.55 },
+  { symbol: "VRE", name: "CTCP Vincom Retail", exchange: "HOSE", sector: "Bất động sản", price: 28900, percent: -1.7 },
+  { symbol: "ACB", name: "Ngân hàng TMCP Á Châu", exchange: "HOSE", sector: "Ngân hàng", price: 25100, percent: 0.95 },
+  { symbol: "MBB", name: "Ngân hàng TMCP Quân đội", exchange: "HOSE", sector: "Ngân hàng", price: 26200, percent: 1.8 },
+  { symbol: "VIC", name: "Tập đoàn Vingroup", exchange: "HOSE", sector: "Bất động sản", price: 42700, percent: 1.1 },
+  { symbol: "BSR", name: "Lọc hóa dầu Bình Sơn", exchange: "UPCOM", sector: "Dầu khí", price: 21900, percent: 1.2 },
+  { symbol: "PVS", name: "Dịch vụ kỹ thuật dầu khí", exchange: "HNX", sector: "Dầu khí", price: 34900, percent: 1.9 },
+  { symbol: "DGC", name: "Hóa chất Đức Giang", exchange: "HOSE", sector: "Hóa chất", price: 112400, percent: 2.3 },
+  { symbol: "VIX", name: "Chứng khoán VIX", exchange: "HOSE", sector: "Tài chính", price: 18100, percent: 4.6 },
 ];
 
 const stockNewsMockData: Record<string, StockNewsItem[]> = {
@@ -270,6 +279,8 @@ export async function searchStocks(query: string, limit = 8): Promise<StockSearc
     name: item.name,
     exchange: item.exchange,
     sector: item.sector,
+    price: typeof item.price === "number" ? item.price : null,
+    percent: typeof item.daily_change === "number" ? item.daily_change : null,
   }));
 }
 
@@ -362,7 +373,14 @@ export async function getStockDetail(symbol: string): Promise<StockDetailData> {
   const matched =
     searchResults.find((stock) => stock.symbol.toUpperCase() === normalizedSymbol)
     ?? searchResults[0]
-    ?? { symbol: normalizedSymbol, name: null, exchange: null, sector: null };
+    ?? {
+      symbol: normalizedSymbol,
+      name: null,
+      exchange: null,
+      sector: null,
+      price: null,
+      percent: null,
+    };
 
   const latestClose = history30d[history30d.length - 1]?.close ?? 0;
   const previousClose = history30d[history30d.length - 2]?.close ?? latestClose;

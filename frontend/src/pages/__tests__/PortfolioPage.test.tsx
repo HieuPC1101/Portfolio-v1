@@ -22,9 +22,9 @@ describe("PortfolioPage", () => {
     renderWithProviders(<PortfolioPage />);
 
     expect(await screen.findByText("Danh mục đầu tư")).toBeInTheDocument();
-    expect(await screen.findByText("Danh mục chính")).toBeInTheDocument();
+    expect((await screen.findAllByText("Danh mục chính")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("VCB").length).toBeGreaterThan(0);
     expect(screen.getByText("Tạo danh mục")).toBeInTheDocument();
-    expect(screen.getByText("Thêm")).toBeInTheDocument();
+    expect(screen.getAllByText("Thêm").length).toBeGreaterThan(0);
   });
 });

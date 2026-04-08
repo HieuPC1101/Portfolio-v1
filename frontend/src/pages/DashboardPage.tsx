@@ -4,11 +4,87 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { PercentBadge } from "@/components/common/PercentBadge";
 import { formatVND } from "@/lib/format";
 import { useDashboardQuery } from "@/hooks/useDashboardQuery";
-import { Activity, DollarSign, RefreshCw } from "lucide-react";
+import type { TopMover } from "@/types/dashboard";
+import { Activity, BarChart3, DollarSign, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useEffect, useState } from "react";
+import type { ComponentType } from "react";
+
+function TopMoverSection({
+  title,
+  description,
+  stocks,
+  icon,
+  iconClassName,
+  emptyText,
+  highlightByPercent,
+}: {
+  title: string;
+  description: string;
+  stocks: TopMover[];
+  icon: ComponentType<{ className?: string }>;
+  iconClassName: string;
+  emptyText: string;
+  highlightByPercent?: boolean;
+}) {
+  const Icon = icon;
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-accent/30">
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2.5">
+        <Icon className={`h-4 w-4 ${iconClassName}`} />
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+
+      {stocks.length > 0 ? (
+        <div className="divide-y divide-border/50">
+          {stocks.map((stock) => {
+            const isUp = stock.percent >= 0;
+
+            return (
+              <div key={stock.symbol} className="flex items-center justify-between px-3 py-2.5 hover:bg-accent/50">
+                <div>
+                  <p className="text-sm font-semibold">{stock.symbol}</p>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    Thanh khoản: {stock.liquidity ? formatVND(stock.liquidity) : "--"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm tabular-nums">{stock.price.toLocaleString("vi-VN")}</p>
+                  <p
+                    className={`text-xs tabular-nums ${
+                      highlightByPercent ? (isUp ? "text-stock-up" : "text-stock-down") : "text-foreground"
+                    }`}
+                  >
+                    {isUp ? "+" : ""}
+                    {stock.percent.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="px-3 py-4 text-sm text-muted-foreground">{emptyText}</div>
+      )}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
-  const { data, isPending, isError, refetch, isFetching } = useDashboardQuery();
+  const { data, isPending, isError, refetch, isFetching, dataUpdatedAt } = useDashboardQuery();
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   if (isPending) {
     return (
@@ -23,7 +99,28 @@ export default function DashboardPage() {
   }
 
   const hasIndices = data.indices.length > 0;
-  const hasTopMovers = data.topMovers.length > 0;
+  const hasTopMovers = data.topGainers.length > 0 || data.topLosers.length > 0 || data.topMostActive.length > 0;
+  const lastUpdatedText =
+    dataUpdatedAt > 0
+      ? new Intl.DateTimeFormat("vi-VN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(dataUpdatedAt)
+      : "--";
+  const liveTimeText = new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(currentTime);
 
   return (
     <div className="space-y-6">
@@ -31,6 +128,12 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Tổng quan</h1>
           <p className="text-muted-foreground text-sm mt-1">Theo dõi thị trường và danh mục đầu tư</p>
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
+            <span className={`inline-block h-2 w-2 rounded-full ${isFetching ? "bg-amber-400 animate-pulse" : "bg-stock-up"}`} />
+            <span>{isFetching ? "Đang cập nhật dữ liệu..." : `Realtime: ${liveTimeText}`}</span>
+            <span aria-hidden="true">•</span>
+            <span>Cập nhật lần cuối: {lastUpdatedText}</span>
+          </p>
         </div>
         <Button
           variant="outline"
@@ -167,32 +270,36 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           {hasTopMovers ? (
-            <div className="overflow-x-auto overflow-y-auto max-h-[400px]">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground text-xs border-b border-border sticky top-0 bg-card z-10">
-                    <th className="text-left py-2 font-medium">Mã CK</th>
-                    <th className="text-right py-2 font-medium">Giá</th>
-                    <th className="text-right py-2 font-medium">+/-</th>
-                    <th className="text-right py-2 font-medium">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.topMovers.map((stock) => (
-                    <tr key={stock.symbol} className="border-b border-border/50 hover:bg-accent/50">
-                      <td className="py-2.5 font-semibold">{stock.symbol}</td>
-                      <td className="text-right tabular-nums">{stock.price.toLocaleString("vi-VN")}</td>
-                      <td className={`text-right tabular-nums ${stock.change > 0 ? "text-stock-up" : "text-stock-down"}`}>
-                        {stock.change > 0 ? "+" : ""}
-                        {stock.change.toLocaleString("vi-VN")}
-                      </td>
-                      <td className="text-right">
-                        <PercentBadge value={stock.percent} showIcon={false} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+              <TopMoverSection
+                title="Top cổ phiếu tăng giá"
+                description="Nhóm có phần trăm tăng mạnh nhất"
+                stocks={data.topGainers}
+                icon={TrendingUp}
+                iconClassName="text-stock-up"
+                emptyText="Chưa có dữ liệu tăng giá."
+                highlightByPercent
+              />
+
+              <TopMoverSection
+                title="Top cổ phiếu giảm giá"
+                description="Nhóm có phần trăm giảm mạnh nhất"
+                stocks={data.topLosers}
+                icon={TrendingDown}
+                iconClassName="text-stock-down"
+                emptyText="Chưa có dữ liệu giảm giá."
+                highlightByPercent
+              />
+
+              <TopMoverSection
+                title="Top khối lượng giao dịch"
+                description="Nhóm có thanh khoản bình quân cao"
+                stocks={data.topMostActive}
+                icon={BarChart3}
+                iconClassName="text-stock-ref"
+                emptyText="Chưa có dữ liệu khối lượng giao dịch."
+                highlightByPercent
+              />
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">Chưa có dữ liệu biến động.</div>
