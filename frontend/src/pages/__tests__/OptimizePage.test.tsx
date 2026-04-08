@@ -4,9 +4,9 @@ import { MemoryRouter } from "react-router-dom";
 import OptimizePage from "@/pages/OptimizePage";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
-vi.mock("@/config/env", () => ({
-  isMockMode: true,
-  MOCK_DELAY_MS: 0,
+vi.mock("@/config/runtime", () => ({
+  ENABLE_MOCK_API: true,
+  MOCK_API_DELAY_MS: 0,
 }));
 
 describe("OptimizePage", () => {

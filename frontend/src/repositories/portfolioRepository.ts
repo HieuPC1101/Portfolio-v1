@@ -1,4 +1,4 @@
-import { isMockMode, MOCK_DELAY_MS } from "@/config/env";
+import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiAuthDelete, apiAuthGet, apiAuthPost, apiAuthPut } from "@/lib/apiAuth";
 import { portfolioMock } from "@/mocks/portfolio.mock";
 import type {
@@ -152,8 +152,8 @@ function mapPortfolio(portfolio: BackendPortfolio): PortfolioItem {
 }
 
 export async function getPortfolioList(): Promise<PortfolioListData> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return clone(mockState);
   }
 
@@ -162,8 +162,8 @@ export async function getPortfolioList(): Promise<PortfolioListData> {
 }
 
 export async function createPortfolio(payload: CreatePortfolioPayload): Promise<PortfolioItem> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     const nextId = String((Math.max(0, ...mockState.portfolios.map((item) => Number(item.id))) || 0) + 1);
     const created = recalculatePortfolio({
       id: nextId,
@@ -184,8 +184,8 @@ export async function createPortfolio(payload: CreatePortfolioPayload): Promise<
 }
 
 export async function updatePortfolio(id: string, payload: UpdatePortfolioPayload): Promise<PortfolioItem> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     const index = mockState.portfolios.findIndex((item) => item.id === id);
     if (index < 0) {
       throw new Error("Portfolio not found");
@@ -210,8 +210,8 @@ export async function updatePortfolio(id: string, payload: UpdatePortfolioPayloa
 }
 
 export async function deletePortfolio(id: string): Promise<void> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     mockState = { portfolios: mockState.portfolios.filter((item) => item.id !== id) };
     return;
   }
@@ -220,8 +220,8 @@ export async function deletePortfolio(id: string): Promise<void> {
 }
 
 export async function addStockToPortfolio(portfolioId: string, payload: AddStockPayload): Promise<PortfolioHolding> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     const index = mockState.portfolios.findIndex((item) => item.id === portfolioId);
     if (index < 0) {
       throw new Error("Portfolio not found");
@@ -264,8 +264,8 @@ export async function updatePortfolioStock(
   stockId: string,
   payload: UpdateStockPayload,
 ): Promise<PortfolioHolding> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     const portfolioIndex = mockState.portfolios.findIndex((item) => item.id === portfolioId);
     if (portfolioIndex < 0) {
       throw new Error("Portfolio not found");
@@ -302,8 +302,8 @@ export async function updatePortfolioStock(
 }
 
 export async function deletePortfolioStock(portfolioId: string, stockId: string): Promise<void> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     const portfolioIndex = mockState.portfolios.findIndex((item) => item.id === portfolioId);
     if (portfolioIndex < 0) {
       throw new Error("Portfolio not found");

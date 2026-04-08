@@ -1,4 +1,4 @@
-import { isMockMode, MOCK_DELAY_MS } from "@/config/env";
+import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiGet } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
 import { newsMock } from "@/mocks/news.mock";
@@ -30,8 +30,8 @@ async function delay(ms: number) {
 }
 
 export async function getNewsFeed(): Promise<NewsFeedData> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return newsMock;
   }
 

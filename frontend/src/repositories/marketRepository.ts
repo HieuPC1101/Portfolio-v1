@@ -1,4 +1,4 @@
-import { isMockMode, MOCK_DELAY_MS } from "@/config/env";
+import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiGet } from "@/lib/api";
 import { marketMock } from "@/mocks/market.mock";
 import type { MarketData, Sector, StockBasic } from "@/types/market";
@@ -244,8 +244,8 @@ async function getLiveMarketData(): Promise<MarketData> {
 }
 
 export async function getMarketData(): Promise<MarketData> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return marketMock;
   }
 
@@ -258,8 +258,8 @@ export async function searchStocks(query: string, limit = 8): Promise<StockSearc
     return [];
   }
 
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
 
     const lowerQuery = normalized.toLowerCase();
     return stockSearchMockData
@@ -290,8 +290,8 @@ export async function getStockPriceHistory(symbol: string, days = 30): Promise<S
     return [];
   }
 
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return buildMockPriceHistory(normalizedSymbol, days);
   }
 
@@ -321,8 +321,8 @@ export async function getStockOHLC(symbol: string, days = 30): Promise<OHLCPoint
     return [];
   }
 
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return buildMockOHLCHistory(normalizedSymbol, days);
   }
 
@@ -404,8 +404,8 @@ export async function getStockNews(symbol: string, limit = 5): Promise<StockNews
     return [];
   }
 
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return (stockNewsMockData[normalizedSymbol] ?? []).slice(0, limit);
   }
 

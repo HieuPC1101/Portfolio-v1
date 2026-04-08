@@ -1,4 +1,4 @@
-import { isMockMode, MOCK_DELAY_MS } from "@/config/env";
+import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiGet } from "@/lib/api";
 import { apiAuthGet } from "@/lib/apiAuth";
 import { dashboardMock } from "@/mocks/dashboard.mock";
@@ -164,8 +164,8 @@ async function getLiveDashboardData(): Promise<DashboardData> {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return dashboardMock;
   }
 

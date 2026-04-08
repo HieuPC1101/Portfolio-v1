@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/config/env", () => ({
-  isMockMode: true,
-  MOCK_DELAY_MS: 0,
+vi.mock("@/config/runtime", () => ({
+  ENABLE_MOCK_API: true,
+  MOCK_API_DELAY_MS: 0,
 }));
 
 import {

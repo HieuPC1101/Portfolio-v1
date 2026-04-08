@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/config/env", () => ({
-  isMockMode: false,
-  MOCK_DELAY_MS: 0,
-  API_BASE_URL: "http://localhost:8000",
-  AUTH_TOKEN: "test-token",
+vi.mock("@/config/runtime", () => ({
+  ENABLE_MOCK_API: false,
+  MOCK_API_DELAY_MS: 0,
 }));
 
 import {
@@ -15,10 +13,13 @@ import {
 
 describe("optimizeRepository", () => {
   afterEach(() => {
+    localStorage.clear();
     vi.unstubAllGlobals();
   });
 
   it("lấy danh sách thuật toán từ backend", async () => {
+    localStorage.setItem("finstock_access_token", "test-token");
+
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -45,7 +46,7 @@ describe("optimizeRepository", () => {
         desc: "Tối ưu lợi nhuận điều chỉnh theo rủi ro",
       },
     ]);
-    expect(fetch).toHaveBeenCalledWith("http://localhost:8000/api/v1/optimize/models", {
+    expect(fetch).toHaveBeenCalledWith("/api/v1/optimize/models", {
       method: "GET",
       headers: { Authorization: "Bearer test-token" },
       body: undefined,
@@ -74,7 +75,7 @@ describe("optimizeRepository", () => {
     expect(results).toHaveLength(1);
     expect(results[0].symbol).toBe("FPT");
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/market/search?query=fpt&limit=8",
+      "/api/v1/market/search?query=fpt&limit=8",
     );
   });
 

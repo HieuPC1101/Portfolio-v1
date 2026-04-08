@@ -1,4 +1,4 @@
-import { isMockMode, MOCK_DELAY_MS } from "@/config/env";
+import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiGet } from "@/lib/api";
 import { apiAuthGet, apiAuthPost } from "@/lib/apiAuth";
 import { optimizeMock } from "@/mocks/optimize.mock";
@@ -252,8 +252,8 @@ function buildMockResult(payload: CalculateOptimizationPayload): OptimizeResultD
 }
 
 export async function getOptimizationAlgorithms(): Promise<OptimizeAlgorithm[]> {
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return optimizeMock.algorithms;
   }
 
@@ -269,8 +269,8 @@ export async function searchOptimizationStocks(query: string, limit = 8): Promis
     return [];
   }
 
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     const lowerQuery = normalized.toLowerCase();
 
     return stockSearchMockData
@@ -295,8 +295,8 @@ export async function searchOptimizationStocks(query: string, limit = 8): Promis
 export async function calculateOptimization(payload: CalculateOptimizationPayload): Promise<OptimizeResultData> {
   const symbols = normalizeSymbols(payload.stocks);
 
-  if (isMockMode) {
-    await delay(MOCK_DELAY_MS);
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
     return buildMockResult(payload);
   }
 
