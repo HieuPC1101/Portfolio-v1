@@ -76,91 +76,6 @@ def list_portfolios(
     return portfolios
 
 
-@router.get("/{portfolio_id}", response_model=PortfolioResponse)
-def get_portfolio(
-    portfolio_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Any:
-    """
-    Get a specific portfolio by ID.
-
-    Only returns portfolio if it belongs to the current user.
-    """
-    portfolio = (
-        db.query(Portfolio)
-        .filter(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
-        .first()
-    )
-
-    if not portfolio:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
-        )
-
-    return portfolio
-
-
-@router.put("/{portfolio_id}", response_model=PortfolioResponse)
-def update_portfolio(
-    portfolio_id: int,
-    portfolio_data: PortfolioUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Any:
-    """
-    Update a portfolio.
-
-    Can update name, description, and other non-critical fields.
-    """
-    portfolio = (
-        db.query(Portfolio)
-        .filter(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
-        .first()
-    )
-
-    if not portfolio:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
-        )
-
-    # Update fields
-    update_data = portfolio_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(portfolio, field, value)
-
-    db.commit()
-    db.refresh(portfolio)
-
-    return portfolio
-
-
-@router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_portfolio(
-    portfolio_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> None:
-    """
-    Delete a portfolio.
-
-    Also deletes all associated stocks and optimization runs.
-    """
-    portfolio = (
-        db.query(Portfolio)
-        .filter(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
-        .first()
-    )
-
-    if not portfolio:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
-        )
-
-    db.delete(portfolio)
-    db.commit()
-
-
 # ========== Portfolio Stocks ==========
 
 
@@ -589,4 +504,89 @@ def remove_stock_from_watchlist(
         )
 
     db.delete(stock)
+    db.commit()
+
+
+@router.get("/{portfolio_id}", response_model=PortfolioResponse)
+def get_portfolio(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    """
+    Get a specific portfolio by ID.
+
+    Only returns portfolio if it belongs to the current user.
+    """
+    portfolio = (
+        db.query(Portfolio)
+        .filter(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
+        .first()
+    )
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
+        )
+
+    return portfolio
+
+
+@router.put("/{portfolio_id}", response_model=PortfolioResponse)
+def update_portfolio(
+    portfolio_id: int,
+    portfolio_data: PortfolioUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    """
+    Update a portfolio.
+
+    Can update name, description, and other non-critical fields.
+    """
+    portfolio = (
+        db.query(Portfolio)
+        .filter(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
+        .first()
+    )
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
+        )
+
+    # Update fields
+    update_data = portfolio_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(portfolio, field, value)
+
+    db.commit()
+    db.refresh(portfolio)
+
+    return portfolio
+
+
+@router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_portfolio(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Delete a portfolio.
+
+    Also deletes all associated stocks and optimization runs.
+    """
+    portfolio = (
+        db.query(Portfolio)
+        .filter(Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id)
+        .first()
+    )
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found"
+        )
+
+    db.delete(portfolio)
     db.commit()

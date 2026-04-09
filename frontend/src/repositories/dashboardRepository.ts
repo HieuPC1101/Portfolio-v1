@@ -31,21 +31,26 @@ interface BackendHistoryPoint {
 }
 
 interface BackendMover {
-  ticker: string;
-  price: number;
-  daily_change: number;
+  ticker?: string | null;
+  symbol?: string | null;
+  price?: number | null;
+  daily_change?: number | null;
+  change_percent?: number | null;
+  percent?: number | null;
   avg_trading_value_20d?: number | null;
 }
 
 function isActiveMover(stock: BackendMover): boolean {
-  return Number.isFinite(stock.price) && stock.price > 0;
+  return typeof stock.price === "number" && Number.isFinite(stock.price) && stock.price > 0;
 }
 
 interface BackendTopMovers {
-  gainers: BackendMover[];
-  losers: BackendMover[];
-  most_active: BackendMover[];
+  gainers?: BackendMover[];
+  losers?: BackendMover[];
+  most_active?: BackendMover[];
 }
+
+const MAX_TOP_MOVERS = 10;
 
 function parseLiquidity(value: number | null | undefined): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -56,14 +61,69 @@ function parseLiquidity(value: number | null | undefined): number | null {
 }
 
 function mapMover(stock: BackendMover): TopMover {
-  const percent = Number.isFinite(stock.daily_change) ? stock.daily_change : 0;
+  const percentRaw = stock.daily_change ?? stock.change_percent ?? stock.percent;
+  const percent = typeof percentRaw === "number" && Number.isFinite(percentRaw) ? percentRaw : 0;
+  const symbol = (stock.ticker ?? stock.symbol ?? "").trim().toUpperCase();
+  const price = typeof stock.price === "number" && Number.isFinite(stock.price) ? stock.price : 0;
 
   return {
-    symbol: stock.ticker,
-    price: stock.price,
-    change: parseFloat(((stock.price * percent) / 100).toFixed(0)),
+    symbol,
+    price,
+    change: parseFloat(((price * percent) / 100).toFixed(0)),
     percent,
     liquidity: parseLiquidity(stock.avg_trading_value_20d),
+  };
+}
+
+function mapMovers(stocks: BackendMover[] | undefined): TopMover[] {
+  if (!Array.isArray(stocks) || stocks.length === 0) {
+    return [];
+  }
+
+  return stocks
+    .filter(isActiveMover)
+    .map(mapMover)
+    .filter((stock) => stock.symbol.length > 0);
+}
+
+function capMovers(stocks: TopMover[]): TopMover[] {
+  return stocks.slice(0, MAX_TOP_MOVERS);
+}
+
+function resolveTopMovers(
+  topGainers: TopMover[],
+  topLosers: TopMover[],
+  topMostActive: TopMover[],
+): { topGainers: TopMover[]; topLosers: TopMover[]; topMostActive: TopMover[] } {
+  const mergedBySymbol = new Map<string, TopMover>();
+
+  for (const stock of [...topGainers, ...topLosers, ...topMostActive]) {
+    if (!mergedBySymbol.has(stock.symbol)) {
+      mergedBySymbol.set(stock.symbol, stock);
+    }
+  }
+
+  const merged = [...mergedBySymbol.values()];
+  const fallbackGainers = [...merged].sort((a, b) => b.percent - a.percent);
+  const fallbackLosers = [...merged].sort((a, b) => a.percent - b.percent);
+  const fallbackMostActive = [...merged].sort((a, b) => (b.liquidity ?? 0) - (a.liquidity ?? 0));
+
+  const resolvedGainers = topGainers.length > 0 ? topGainers : fallbackGainers;
+  const resolvedLosers = topLosers.length > 0 ? topLosers : fallbackLosers;
+  const resolvedMostActive = topMostActive.length > 0 ? topMostActive : fallbackMostActive;
+
+  if (resolvedGainers.length > 0 || resolvedLosers.length > 0 || resolvedMostActive.length > 0) {
+    return {
+      topGainers: capMovers(resolvedGainers),
+      topLosers: capMovers(resolvedLosers),
+      topMostActive: capMovers(resolvedMostActive),
+    };
+  }
+
+  return {
+    topGainers: capMovers(dashboardMock.topGainers),
+    topLosers: capMovers(dashboardMock.topLosers),
+    topMostActive: capMovers(dashboardMock.topMostActive),
   };
 }
 
@@ -98,7 +158,7 @@ async function getLiveDashboardData(): Promise<DashboardData> {
   const [indicesRaw, historyRaw, moversRaw, portfoliosRaw] = await Promise.all([
     apiGet<BackendIndices>("/api/v1/market/indices"),
     apiGet<BackendHistoryPoint[]>("/api/v1/market/indices/history?symbols=VNINDEX&months=1"),
-    apiGet<BackendTopMovers>("/api/v1/market/top-movers?top_n=6"),
+    apiGet<BackendTopMovers>("/api/v1/market/top-movers?top_n=10"),
     apiAuthGet<BackendPortfolio[]>("/api/v1/portfolios").catch(() => [] as BackendPortfolio[]),
   ]);
 
@@ -138,17 +198,14 @@ async function getLiveDashboardData(): Promise<DashboardData> {
       value: point.close,
     }));
 
-  const topGainers: TopMover[] = (moversRaw.gainers ?? [])
-    .filter(isActiveMover)
-    .map(mapMover);
-
-  const topLosers: TopMover[] = (moversRaw.losers ?? [])
-    .filter(isActiveMover)
-    .map(mapMover);
-
-  const topMostActive: TopMover[] = (moversRaw.most_active ?? [])
-    .filter(isActiveMover)
-    .map(mapMover);
+  const mappedGainers = mapMovers(moversRaw.gainers);
+  const mappedLosers = mapMovers(moversRaw.losers);
+  const mappedMostActive = mapMovers(moversRaw.most_active);
+  const {
+    topGainers,
+    topLosers,
+    topMostActive,
+  } = resolveTopMovers(mappedGainers, mappedLosers, mappedMostActive);
 
   const totalInvested = portfoliosRaw.reduce((sum, portfolio) => sum + Number(portfolio.total_investment), 0);
   const summary: PortfolioSummary = {

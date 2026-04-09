@@ -46,9 +46,12 @@ export interface StockNewsItem {
 }
 
 interface BackendMover {
-  ticker: string;
-  price: number;
-  daily_change: number;
+  ticker?: string | null;
+  symbol?: string | null;
+  price?: number | null;
+  daily_change?: number | null;
+  change_percent?: number | null;
+  percent?: number | null;
 }
 
 interface BackendStockSearchResult {
@@ -84,8 +87,8 @@ interface BackendNewsArticle {
 }
 
 interface BackendTopMovers {
-  gainers: BackendMover[];
-  losers: BackendMover[];
+  gainers?: BackendMover[];
+  losers?: BackendMover[];
 }
 
 interface BackendSectorMarketCap {
@@ -208,6 +211,64 @@ function mapNewsArticle(article: BackendNewsArticle): StockNewsItem {
   };
 }
 
+function toStockBasic(stock: BackendMover): StockBasic | null {
+  const symbol = (stock.ticker ?? stock.symbol ?? "").trim().toUpperCase();
+  const rawPrice = stock.price;
+  const rawPercent = stock.daily_change ?? stock.change_percent ?? stock.percent;
+
+  if (!symbol || typeof rawPrice !== "number" || !Number.isFinite(rawPrice)) {
+    return null;
+  }
+
+  const percent = typeof rawPercent === "number" && Number.isFinite(rawPercent) ? rawPercent : 0;
+
+  return {
+    symbol,
+    price: rawPrice,
+    percent,
+  };
+}
+
+function mapMovers(stocks: BackendMover[] | undefined): StockBasic[] {
+  if (!Array.isArray(stocks) || stocks.length === 0) {
+    return [];
+  }
+
+  return stocks
+    .map(toStockBasic)
+    .filter((stock): stock is StockBasic => stock !== null);
+}
+
+function ensureMoversData(topGainers: StockBasic[], topLosers: StockBasic[]): { topGainers: StockBasic[]; topLosers: StockBasic[] } {
+  const mergedBySymbol = new Map<string, StockBasic>();
+
+  for (const stock of [...topGainers, ...topLosers]) {
+    if (!mergedBySymbol.has(stock.symbol)) {
+      mergedBySymbol.set(stock.symbol, stock);
+    }
+  }
+
+  const merged = [...mergedBySymbol.values()];
+  const fallbackSize = Math.max(topGainers.length, topLosers.length, 10);
+  const fallbackGainers = [...merged].sort((a, b) => b.percent - a.percent).slice(0, fallbackSize);
+  const fallbackLosers = [...merged].sort((a, b) => a.percent - b.percent).slice(0, fallbackSize);
+
+  const resolvedGainers = topGainers.length > 0 ? topGainers : fallbackGainers;
+  const resolvedLosers = topLosers.length > 0 ? topLosers : fallbackLosers;
+
+  if (resolvedGainers.length > 0 || resolvedLosers.length > 0) {
+    return {
+      topGainers: resolvedGainers,
+      topLosers: resolvedLosers,
+    };
+  }
+
+  return {
+    topGainers: marketMock.topGainers,
+    topLosers: marketMock.topLosers,
+  };
+}
+
 async function getLiveMarketData(): Promise<MarketData> {
   const [movers, marketCap, sectorDetail] = await Promise.all([
     apiGet<BackendTopMovers>("/api/v1/market/top-movers?top_n=10"),
@@ -223,17 +284,9 @@ async function getLiveMarketData(): Promise<MarketData> {
     change: changeMap.get(sector.industry) ?? 0,
   }));
 
-  const topGainers: StockBasic[] = movers.gainers.map((stock) => ({
-    symbol: stock.ticker,
-    price: stock.price,
-    percent: stock.daily_change,
-  }));
-
-  const topLosers: StockBasic[] = movers.losers.map((stock) => ({
-    symbol: stock.ticker,
-    price: stock.price,
-    percent: stock.daily_change,
-  }));
+  const mappedGainers = mapMovers(movers.gainers);
+  const mappedLosers = mapMovers(movers.losers);
+  const { topGainers, topLosers } = ensureMoversData(mappedGainers, mappedLosers);
 
   return {
     sectors,

@@ -4,11 +4,42 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { PercentBadge } from "@/components/common/PercentBadge";
 import { formatVND } from "@/lib/format";
 import { useDashboardQuery } from "@/hooks/useDashboardQuery";
-import type { TopMover } from "@/types/dashboard";
+import { dashboardMock } from "@/mocks/dashboard.mock";
+import type { DashboardData, TopMover } from "@/types/dashboard";
 import { Activity, BarChart3, DollarSign, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
+
+const MAX_TOP_MOVER_ROWS = 10;
+
+function capTopMovers(stocks: TopMover[]): TopMover[] {
+  return stocks.slice(0, MAX_TOP_MOVER_ROWS);
+}
+
+function resolveTopMoverGroups(data: DashboardData): {
+  topGainers: TopMover[];
+  topLosers: TopMover[];
+  topMostActive: TopMover[];
+} {
+  const topGainers = capTopMovers(data.topGainers);
+  const topLosers = capTopMovers(data.topLosers);
+  const topMostActive = capTopMovers(data.topMostActive);
+
+  if (topGainers.length > 0 || topLosers.length > 0 || topMostActive.length > 0) {
+    return {
+      topGainers,
+      topLosers,
+      topMostActive,
+    };
+  }
+
+  return {
+    topGainers: capTopMovers(dashboardMock.topGainers),
+    topLosers: capTopMovers(dashboardMock.topLosers),
+    topMostActive: capTopMovers(dashboardMock.topMostActive),
+  };
+}
 
 function TopMoverSection({
   title,
@@ -28,6 +59,7 @@ function TopMoverSection({
   highlightByPercent?: boolean;
 }) {
   const Icon = icon;
+  const visibleStocks = stocks.slice(0, MAX_TOP_MOVER_ROWS);
 
   return (
     <div className="rounded-lg border border-border/70 bg-accent/30">
@@ -39,9 +71,9 @@ function TopMoverSection({
         </div>
       </div>
 
-      {stocks.length > 0 ? (
+      {visibleStocks.length > 0 ? (
         <div className="divide-y divide-border/50">
-          {stocks.map((stock) => {
+          {visibleStocks.map((stock) => {
             const isUp = stock.percent >= 0;
 
             return (
@@ -99,7 +131,12 @@ export default function DashboardPage() {
   }
 
   const hasIndices = data.indices.length > 0;
-  const hasTopMovers = data.topGainers.length > 0 || data.topLosers.length > 0 || data.topMostActive.length > 0;
+  const {
+    topGainers: visibleTopGainers,
+    topLosers: visibleTopLosers,
+    topMostActive: visibleTopMostActive,
+  } = resolveTopMoverGroups(data);
+  const hasTopMovers = visibleTopGainers.length > 0 || visibleTopLosers.length > 0 || visibleTopMostActive.length > 0;
   const lastUpdatedText =
     dataUpdatedAt > 0
       ? new Intl.DateTimeFormat("vi-VN", {
@@ -274,7 +311,7 @@ export default function DashboardPage() {
               <TopMoverSection
                 title="Top cổ phiếu tăng giá"
                 description="Nhóm có phần trăm tăng mạnh nhất"
-                stocks={data.topGainers}
+                stocks={visibleTopGainers}
                 icon={TrendingUp}
                 iconClassName="text-stock-up"
                 emptyText="Chưa có dữ liệu tăng giá."
@@ -284,7 +321,7 @@ export default function DashboardPage() {
               <TopMoverSection
                 title="Top cổ phiếu giảm giá"
                 description="Nhóm có phần trăm giảm mạnh nhất"
-                stocks={data.topLosers}
+                stocks={visibleTopLosers}
                 icon={TrendingDown}
                 iconClassName="text-stock-down"
                 emptyText="Chưa có dữ liệu giảm giá."
@@ -294,7 +331,7 @@ export default function DashboardPage() {
               <TopMoverSection
                 title="Top khối lượng giao dịch"
                 description="Nhóm có thanh khoản bình quân cao"
-                stocks={data.topMostActive}
+                stocks={visibleTopMostActive}
                 icon={BarChart3}
                 iconClassName="text-stock-ref"
                 emptyText="Chưa có dữ liệu khối lượng giao dịch."
