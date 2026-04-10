@@ -71,4 +71,22 @@ describe("getPortfolioList", () => {
     const afterDelete = (await getPortfolioList()).portfolios.find((portfolio) => portfolio.id === source.id);
     expect(afterDelete?.holdings.some((holding) => holding.id === added.id)).toBe(false);
   });
+
+  it("giữ nguyên ngân sách danh mục khi thêm cổ phiếu", async () => {
+    const created = await createPortfolio({
+      name: "Danh mục giữ ngân sách",
+      totalInvestment: 10_000_000,
+    });
+
+    expect(created.totalInvested).toBe(10_000_000);
+
+    await addStockToPortfolio(created.id, {
+      symbol: "FPT",
+      shares: 50,
+      purchasePrice: 25_000,
+    });
+
+    const afterAdd = (await getPortfolioList()).portfolios.find((portfolio) => portfolio.id === created.id);
+    expect(afterAdd?.totalInvested).toBe(10_000_000);
+  });
 });

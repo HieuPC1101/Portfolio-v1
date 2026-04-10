@@ -16,6 +16,7 @@ export function useAddStock() {
     mutationFn: ({ portfolioId, payload }: AddStockArgs) => addStockToPortfolio(portfolioId, payload),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 
       if (!variables.silent) {
         toast.success("Thêm cổ phiếu thành công");

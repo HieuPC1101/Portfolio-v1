@@ -19,6 +19,9 @@ from app.schemas.market import (
     SectorPerformanceResponse,
     NewsArticle,
     MarketOverviewResponse,
+    StockOverviewResponse,
+    StockFinancialsResponse,
+    StockRatiosResponse,
 )
 from app.data_process.data_loader import (
     get_sector_snapshot,
@@ -100,7 +103,9 @@ def _clean_records(records: list) -> list:
 @router.get("/sectors/detail")
 def get_sector_performance_detail(
     exchange: str = Query("HOSE,HNX,UPCOM", description="Sàn: HOSE, HNX, UPCOM"),
-    size: int = Query(400, ge=50, le=1000, description="Số cổ phiếu tối đa lấy snapshot"),
+    size: int = Query(
+        400, ge=50, le=1000, description="Số cổ phiếu tối đa lấy snapshot"
+    ),
 ) -> Any:
     """
     Hiệu suất chi tiết từng ngành gồm:
@@ -116,7 +121,9 @@ def get_sector_performance_detail(
         perf = summarize_sector_performance(snapshot, top_n=None)
         return _clean_records(perf.to_dict(orient="records"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch sector detail: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch sector detail: {str(e)}"
+        )
 
 
 @router.get("/sectors/market-cap")
@@ -137,7 +144,9 @@ def get_sector_market_cap(
         dist = summarize_market_cap_distribution(snapshot, top_n=top_n)
         return _clean_records(dist.to_dict(orient="records"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch market cap distribution: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch market cap distribution: {str(e)}"
+        )
 
 
 @router.get("/sectors/heatmap")
@@ -157,14 +166,19 @@ def get_sector_heatmap(
         heatmap = get_sector_heatmap_matrix(snapshot, top_n=top_n)
         return _clean_records(heatmap.to_dict(orient="records"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch sector heatmap: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch sector heatmap: {str(e)}"
+        )
 
 
 @router.get("/sectors/{sector_name}/stocks")
 def get_stocks_by_sector(
     sector_name: str,
     limit: int = Query(50, ge=1, le=200, description="Số cổ phiếu tối đa"),
-    sort_by: str = Query("market_cap", description="Sắp xếp: market_cap | avg_trading_value_20d | daily_change"),
+    sort_by: str = Query(
+        "market_cap",
+        description="Sắp xếp: market_cap | avg_trading_value_20d | daily_change",
+    ),
     exchange: str = Query("HOSE,HNX,UPCOM", description="Sàn"),
     size: int = Query(400, ge=50, le=1000),
 ) -> Any:
@@ -174,7 +188,10 @@ def get_stocks_by_sector(
     """
     valid_sort = {"market_cap", "avg_trading_value_20d", "daily_change"}
     if sort_by not in valid_sort:
-        raise HTTPException(status_code=400, detail=f"sort_by phải là một trong: {', '.join(valid_sort)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"sort_by phải là một trong: {', '.join(valid_sort)}",
+        )
 
     try:
         snapshot = get_sector_snapshot(exchange=exchange, size=size)
@@ -186,7 +203,16 @@ def get_stocks_by_sector(
             return []
 
         output_cols = [
-            c for c in ["ticker", "industry", "price", "daily_change", "market_cap", "avg_trading_value_20d", "foreign_buysell_20s"]
+            c
+            for c in [
+                "ticker",
+                "industry",
+                "price",
+                "daily_change",
+                "market_cap",
+                "avg_trading_value_20d",
+                "foreign_buysell_20s",
+            ]
             if c in filtered.columns
         ]
         filtered = filtered[output_cols]
@@ -197,7 +223,9 @@ def get_stocks_by_sector(
         filtered = filtered.head(limit)
         return _clean_records(filtered.to_dict(orient="records"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch stocks by sector: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch stocks by sector: {str(e)}"
+        )
 
 
 @router.get("/foreign-flow")
@@ -221,7 +249,9 @@ def get_foreign_flow(
         flow = get_foreign_flow_leaderboard(snapshot, top_n=top_n)
         return _clean_records(flow.to_dict(orient="records"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch foreign flow: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch foreign flow: {str(e)}"
+        )
 
 
 @router.get("/liquidity")
@@ -243,7 +273,9 @@ def get_liquidity_leaders_endpoint(
         leaders = get_liquidity_leaders(snapshot, top_n=top_n)
         return _clean_records(leaders.to_dict(orient="records"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch liquidity leaders: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch liquidity leaders: {str(e)}"
+        )
 
 
 @router.get("/top-movers")
@@ -266,7 +298,15 @@ def get_top_movers(
             return {"gainers": [], "losers": [], "most_active": []}
 
         cols = [
-            c for c in ["ticker", "industry", "price", "daily_change", "market_cap", "avg_trading_value_20d"]
+            c
+            for c in [
+                "ticker",
+                "industry",
+                "price",
+                "daily_change",
+                "market_cap",
+                "avg_trading_value_20d",
+            ]
             if c in snapshot.columns
         ]
         base = snapshot[cols].copy()
@@ -285,13 +325,27 @@ def get_top_movers(
         def _to_records(df):
             return _clean_records(df.head(top_n).to_dict(orient="records"))
 
-        gainers = _to_records(base.sort_values("daily_change", ascending=False)) if "daily_change" in base.columns else []
-        losers = _to_records(base.sort_values("daily_change", ascending=True)) if "daily_change" in base.columns else []
-        most_active = _to_records(base.sort_values("avg_trading_value_20d", ascending=False)) if "avg_trading_value_20d" in base.columns else []
+        gainers = (
+            _to_records(base.sort_values("daily_change", ascending=False))
+            if "daily_change" in base.columns
+            else []
+        )
+        losers = (
+            _to_records(base.sort_values("daily_change", ascending=True))
+            if "daily_change" in base.columns
+            else []
+        )
+        most_active = (
+            _to_records(base.sort_values("avg_trading_value_20d", ascending=False))
+            if "avg_trading_value_20d" in base.columns
+            else []
+        )
 
         return {"gainers": gainers, "losers": losers, "most_active": most_active}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch top movers: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch top movers: {str(e)}"
+        )
 
 
 @router.get("/indices/history")
@@ -301,7 +355,9 @@ def get_indices_history_endpoint(
         description="Danh sách chỉ số, phân cách bởi dấu phẩy",
     ),
     months: int = Query(6, ge=1, le=60, description="Số tháng lịch sử"),
-    start_date: Optional[str] = Query(None, description="Ngày bắt đầu (YYYY-MM-DD), ghi đè months"),
+    start_date: Optional[str] = Query(
+        None, description="Ngày bắt đầu (YYYY-MM-DD), ghi đè months"
+    ),
     end_date: Optional[str] = Query(None, description="Ngày kết thúc (YYYY-MM-DD)"),
 ) -> Any:
     """
@@ -329,7 +385,9 @@ def get_indices_history_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch indices history: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch indices history: {str(e)}"
+        )
 
 
 @router.get("/stock/{symbol}/price", response_model=StockPriceResponse)
@@ -613,6 +671,61 @@ def get_stock_fundamentals(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch fundamentals: {str(e)}"
+        )
+
+
+@router.get("/stock/{symbol}/overview", response_model=StockOverviewResponse)
+def get_stock_overview(symbol: str) -> Any:
+    """Get company overview for a stock symbol."""
+    try:
+        return market_service.get_stock_overview(symbol)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch stock overview: {str(e)}"
+        )
+
+
+@router.get("/stock/{symbol}/financials", response_model=StockFinancialsResponse)
+def get_stock_financials(
+    symbol: str,
+    period: str = Query("quarterly", description="Period: quarterly|yearly"),
+    limit: int = Query(8, ge=1, le=20, description="Number of periods to return"),
+) -> Any:
+    """Get stock financial statements in normalized structure."""
+    normalized_period = (period or "").strip().lower()
+    if normalized_period not in {
+        "quarterly",
+        "yearly",
+        "quarter",
+        "year",
+        "q",
+        "y",
+        "annual",
+    }:
+        raise HTTPException(
+            status_code=400, detail="Invalid period. Use quarterly or yearly"
+        )
+
+    try:
+        return market_service.get_stock_financials(
+            symbol=symbol, period=normalized_period, limit=limit
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch stock financials: {str(e)}"
+        )
+
+
+@router.get("/stock/{symbol}/ratios", response_model=StockRatiosResponse)
+def get_stock_ratios(symbol: str) -> Any:
+    """Get key valuation and profitability ratios for a stock symbol."""
+    try:
+        return market_service.get_stock_ratios(symbol)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch stock ratios: {str(e)}"
         )
 
 

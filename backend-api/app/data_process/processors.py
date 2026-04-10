@@ -35,6 +35,8 @@ def get_indices_history(
 ) -> pd.DataFrame:
     """Return long-format historical quotes for a list of indices."""
     frames = []
+    output_columns = ["time", "close", "volume", "symbol"]
+
     for symbol in symbols:
         df = get_index_history(
             symbol,
@@ -46,16 +48,18 @@ def get_indices_history(
         if df.empty:
             continue
         df = df.copy()
+        if "volume" not in df.columns:
+            df["volume"] = pd.NA
         df["display"] = INDEX_LABELS.get(str(symbol).upper(), symbol)
-        frames.append(df[["time", "close", "display"]])
+        frames.append(df[["time", "close", "volume", "display"]])
 
     if not frames:
-        return pd.DataFrame(columns=["time", "close", "symbol"])
+        return pd.DataFrame(columns=output_columns)
 
     combined = pd.concat(frames, ignore_index=True)
     combined = combined.sort_values("time")
     combined = combined.rename(columns={"display": "symbol"})
-    return combined
+    return combined[output_columns]
 
 
 def get_market_indices_metrics(

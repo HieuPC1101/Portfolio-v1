@@ -16,6 +16,7 @@ export function useUpdateStock() {
     mutationFn: ({ portfolioId, stockId, payload }: UpdateStockArgs) => updatePortfolioStock(portfolioId, stockId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Cập nhật cổ phiếu thành công");
     },
     onError: (error) => {

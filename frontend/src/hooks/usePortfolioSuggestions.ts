@@ -5,6 +5,9 @@ export function usePortfolioSuggestions() {
   return useQuery({
     queryKey: ["portfolio-suggestions"],
     queryFn: getPortfolioSuggestionData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }

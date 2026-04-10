@@ -21,7 +21,18 @@ def upsert_articles(db: Session, articles: list[dict]) -> int:
         return 0
 
     stmt = pg_insert(NewsArticleModel).values(rows)
-    stmt = stmt.on_conflict_do_nothing(index_elements=["url"])
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["url"],
+        set_={
+            "title": stmt.excluded.title,
+            "summary": stmt.excluded.summary,
+            "source": stmt.excluded.source,
+            "published_at": stmt.excluded.published_at,
+            "category": stmt.excluded.category,
+            "symbols": stmt.excluded.symbols,
+            "fetched_at": func.now(),
+        },
+    )
     try:
         result = db.execute(stmt)
         db.commit()

@@ -301,9 +301,23 @@ def run_integer_programming(weights, latest_prices, total_portfolio_value):
     allocation = DiscreteAllocation(
         weights, latest_prices, total_portfolio_value=total_portfolio_value
     )
-    allocation_lp, leftover_lp = allocation.lp_portfolio(
-        reinvest=False, verbose=True, solver="ECOS_BB"
-    )
+
+    lp_error = None
+    try:
+        allocation_lp, leftover_lp = allocation.lp_portfolio(
+            reinvest=False, verbose=True, solver="ECOS_BB"
+        )
+    except Exception as exc:
+        lp_error = exc
+        logger.warning(
+            "Phan bo Integer Programming that bai (%s). Thu fallback greedy.", exc
+        )
+        allocation_lp, leftover_lp = allocation.greedy_portfolio(
+            reinvest=False, verbose=True
+        )
+
+    if lp_error is not None:
+        logger.info("Da fallback sang greedy allocation thanh cong.")
 
     # Validation: Kiểm tra kết quả phân bổ
     total_spent = sum(
@@ -378,19 +392,55 @@ def markowitz_optimization(
         if target_return_value < min_return:
             target_return_value = min_return
 
-        ef = EfficientFrontier(mean_returns, cov_matrix)
-        ef.efficient_return(target_return=target_return_value)
-        performance = ef.portfolio_performance(verbose=False)
-        cleaned_weights = ef.clean_weights()
+        def _normalize_weights(raw_weights):
+            normalized = {}
+            for key, value in (raw_weights or {}).items():
+                try:
+                    numeric_value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if np.isfinite(numeric_value) and numeric_value > 0:
+                    normalized[str(key)] = numeric_value
 
-        total_weight = sum(cleaned_weights.values())
-        if abs(total_weight - 1.0) > 1e-5:
-            logger.warning(
-                f"[MARKOWITZ] Tong trong so truoc khi chuan hoa: {total_weight}"
+            total = sum(normalized.values())
+            if total <= 0:
+                return {}
+
+            return {k: v / total for k, v in normalized.items()}
+
+        ef = EfficientFrontier(mean_returns, cov_matrix)
+        try:
+            optimized_weights = ef.efficient_return(target_return=target_return_value)
+        except ValueError as exc:
+            message = str(exc).lower()
+            if "maximum possible return" not in message:
+                raise
+
+            max_return_estimator = EfficientFrontier(mean_returns, cov_matrix)
+            max_feasible_return = float(max_return_estimator._max_return())
+            adjusted_target_return = max(
+                min_return,
+                min(target_return_value, max_feasible_return - 1e-6),
             )
-            cleaned_weights = {
-                k: v / total_weight for k, v in cleaned_weights.items() if v > 1e-5
-            }
+            logger.warning(
+                "[MARKOWITZ] target_return=%s vuot nguong kha thi. Dieu chinh xuong %s",
+                target_return_value,
+                adjusted_target_return,
+            )
+
+            ef = EfficientFrontier(mean_returns, cov_matrix)
+            optimized_weights = ef.efficient_return(
+                target_return=adjusted_target_return
+            )
+            target_return_value = adjusted_target_return
+
+        performance = ef.portfolio_performance(verbose=False)
+        cleaned_weights = _normalize_weights(ef.clean_weights())
+        if not cleaned_weights:
+            cleaned_weights = _normalize_weights(optimized_weights)
+
+        if not cleaned_weights:
+            raise ValueError("Khong tao duoc trong so hop le cho mo hinh Markowitz")
 
         latest_prices = get_latest_prices_func(tickers)
         latest_prices_series = _prepare_latest_price_series(

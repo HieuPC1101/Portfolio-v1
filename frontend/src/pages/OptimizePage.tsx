@@ -5,6 +5,13 @@ import {
   AreaChart,
   Bar,
   BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -31,6 +38,7 @@ import type { OptimizeResultData } from "@/types/optimize";
 import { formatVND } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { validateOptimizationInput } from "@/utils/validators";
+import { type RebalancePlan } from "@/utils/optimizationInsights";
 import {
   pushRecentPortfolioId,
   readRecentPortfolioIds,
@@ -39,6 +47,13 @@ import {
 
 const DEFAULT_RISK_FREE_RATE_PERCENT = 5;
 const DEFAULT_TARGET_RETURN_PERCENT = 12;
+const REPORT_COLORS = [
+  "hsl(131, 45%, 40%)",
+  "hsl(205, 71%, 52%)",
+  "hsl(32, 95%, 52%)",
+  "hsl(280, 65%, 60%)",
+  "hsl(4, 82%, 62%)",
+];
 
 function parsePercentInput(rawValue: string): number | null {
   const normalized = rawValue.replace(/,/g, ".").trim();
@@ -112,6 +127,99 @@ export default function OptimizePage() {
     [portfolios, recentPortfolioIds],
   );
   const portfolioBudget = selectedPortfolio?.totalInvested ?? 0;
+  const budgetAwareResult = useMemo(() => {
+    if (!result || !selectedPortfolio || portfolioBudget <= 0) {
+      return result;
+    }
+
+    const currentPriceBySymbol = new Map(
+      selectedPortfolio.holdings
+        .filter((holding) => Number.isFinite(holding.currentPrice) && holding.currentPrice > 0)
+        .map((holding) => [holding.symbol.toUpperCase(), holding.currentPrice]),
+    );
+
+    const allocation = result.allocation.map((item) => {
+      const targetAmount = Math.max(0, Math.round((portfolioBudget * item.weight) / 100));
+      const currentPrice = currentPriceBySymbol.get(item.symbol.toUpperCase());
+
+      if (typeof currentPrice !== "number" || !Number.isFinite(currentPrice) || currentPrice <= 0) {
+        return {
+          ...item,
+          amount: targetAmount,
+        };
+      }
+
+      const shares = Math.max(0, Math.floor(targetAmount / currentPrice));
+
+      return {
+        ...item,
+        shares,
+        amount: Math.round(shares * currentPrice),
+      };
+    });
+
+    return {
+      ...result,
+      allocation,
+    };
+  }, [portfolioBudget, result, selectedPortfolio]);
+  const rebalancePlan = useMemo(() => {
+    if (!budgetAwareResult) {
+      return null;
+    }
+
+    const orders: RebalancePlan["orders"] = budgetAwareResult.allocation
+      .filter((item) => item.shares > 0 || item.amount > 0)
+      .map((item) => {
+        const referencePrice = item.shares > 0 ? item.amount / item.shares : 0;
+
+        return {
+          symbol: item.symbol.toUpperCase(),
+          action: "BUY",
+          currentShares: 0,
+          targetShares: item.shares,
+          deltaShares: item.shares,
+          referencePrice: Math.round(referencePrice * 100) / 100,
+          estimatedAmount: Math.round(item.amount),
+        };
+      })
+      .sort((left, right) => right.estimatedAmount - left.estimatedAmount);
+
+    const buyValue = orders.reduce((sum, order) => sum + order.estimatedAmount, 0);
+
+    return {
+      orders,
+      summary: {
+        buyValue,
+        sellValue: 0,
+        netCashflow: buyValue,
+      },
+    } satisfies RebalancePlan;
+  }, [budgetAwareResult]);
+  const mergedAllocationRows = useMemo(() => {
+    if (!budgetAwareResult) {
+      return [];
+    }
+
+    const orderBySymbol = new Map(
+      (rebalancePlan?.orders ?? []).map((order) => [order.symbol.toUpperCase(), order]),
+    );
+
+    return budgetAwareResult.allocation
+      .map((item) => {
+        const symbol = item.symbol.toUpperCase();
+        const order = orderBySymbol.get(symbol);
+
+        return {
+          ...item,
+          symbol,
+          action: order?.action ?? "HOLD",
+          tradeShares: order ? Math.abs(order.deltaShares) : 0,
+          orderAmount: order?.estimatedAmount ?? 0,
+        };
+      })
+      .sort((left, right) => right.amount - left.amount);
+  }, [budgetAwareResult, rebalancePlan]);
 
   useEffect(() => {
     setRecentPortfolioIds(readRecentPortfolioIds());
@@ -200,13 +308,52 @@ export default function OptimizePage() {
   }, [riskFreeRateInput, selectedAlgo, targetReturnInput]);
 
   const maxWeight = useMemo(() => {
-    if (!result?.weights.length) {
+    if (!budgetAwareResult?.weights.length) {
       return 40;
     }
 
-    const topWeight = Math.max(...result.weights.map((item) => item.weight));
+    const topWeight = Math.max(...budgetAwareResult.weights.map((item) => item.weight));
     return Math.max(10, Math.ceil(topWeight / 5) * 5);
-  }, [result?.weights]);
+  }, [budgetAwareResult?.weights]);
+  const reportAllocationData = useMemo(() => (
+    (budgetAwareResult?.allocation ?? [])
+      .filter((item) => item.amount > 0)
+      .map((item) => ({
+        symbol: item.symbol.toUpperCase(),
+        weight: item.weight,
+        amount: item.amount,
+        amountInMillions: Number((item.amount / 1_000_000).toFixed(2)),
+        shares: item.shares,
+      }))
+      .sort((left, right) => right.amount - left.amount)
+  ), [budgetAwareResult?.allocation]);
+  const reportMetricChartData = useMemo(() => {
+    if (!budgetAwareResult) {
+      return [];
+    }
+
+    return [
+      { metric: "Expected Return", value: budgetAwareResult.metrics.expectedReturn },
+      { metric: "Volatility", value: budgetAwareResult.metrics.volatility },
+      { metric: "Sharpe x100", value: budgetAwareResult.metrics.sharpeRatio * 100 },
+    ];
+  }, [budgetAwareResult]);
+  const reportShareChartData = useMemo(() => (
+    reportAllocationData.map((item) => ({
+      symbol: item.symbol,
+      shares: item.shares,
+    }))
+  ), [reportAllocationData]);
+  const reportBacktestSpreadData = useMemo(() => {
+    if (!budgetAwareResult) {
+      return [];
+    }
+
+    return budgetAwareResult.backtest.map((point) => ({
+      day: point.day,
+      spread: Number((point.portfolio - point.benchmark).toFixed(2)),
+    }));
+  }, [budgetAwareResult]);
 
   async function runOptimization() {
     const errors = validateOptimizationInput({
@@ -451,7 +598,7 @@ export default function OptimizePage() {
         <div className="flex h-48 items-center justify-center">
           <LoadingSpinner />
         </div>
-      ) : !result ? (
+      ) : !budgetAwareResult ? (
         <div className="text-sm text-muted-foreground">Chưa có kết quả tối ưu để hiển thị.</div>
       ) : (
         <>
@@ -463,7 +610,7 @@ export default function OptimizePage() {
               <CardContent>
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={result.weights} layout="vertical">
+                    <BarChart data={budgetAwareResult.weights} layout="vertical">
                       <XAxis
                         type="number"
                         domain={[0, maxWeight]}
@@ -502,73 +649,357 @@ export default function OptimizePage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                   <span className="text-sm text-muted-foreground">Expected Return</span>
-                  <span className="text-lg font-bold text-stock-up">+{result.metrics.expectedReturn}%</span>
+                  <span className="text-lg font-bold text-stock-up">+{budgetAwareResult.metrics.expectedReturn}%</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                   <span className="text-sm text-muted-foreground">Volatility</span>
-                  <span className="text-lg font-bold">{result.metrics.volatility}%</span>
+                  <span className="text-lg font-bold">{budgetAwareResult.metrics.volatility}%</span>
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                   <span className="text-sm text-muted-foreground">Sharpe Ratio</span>
-                  <span className="text-lg font-bold text-stock-ref">{result.metrics.sharpeRatio}</span>
+                  <span className="text-lg font-bold text-stock-ref">{budgetAwareResult.metrics.sharpeRatio}</span>
                 </div>
-                {typeof result.metrics.maxDrawdown === "number" && (
+                {typeof budgetAwareResult.metrics.maxDrawdown === "number" && (
                   <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                     <span className="text-sm text-muted-foreground">Max Drawdown</span>
-                    <span className="text-lg font-bold">{result.metrics.maxDrawdown}%</span>
+                    <span className="text-lg font-bold">{budgetAwareResult.metrics.maxDrawdown}%</span>
                   </div>
                 )}
-                {typeof result.metrics.cvar === "number" && (
+                {typeof budgetAwareResult.metrics.cvar === "number" && (
                   <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                     <span className="text-sm text-muted-foreground">CVaR</span>
-                    <span className="text-lg font-bold">{result.metrics.cvar}%</span>
+                    <span className="text-lg font-bold">{budgetAwareResult.metrics.cvar}%</span>
                   </div>
                 )}
-                {typeof result.metrics.cdar === "number" && (
+                {typeof budgetAwareResult.metrics.cdar === "number" && (
                   <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                     <span className="text-sm text-muted-foreground">CDaR</span>
-                    <span className="text-lg font-bold">{result.metrics.cdar}%</span>
+                    <span className="text-lg font-bold">{budgetAwareResult.metrics.cdar}%</span>
                   </div>
                 )}
-                {typeof result.metrics.beta === "number" && (
+                {typeof budgetAwareResult.metrics.beta === "number" && (
                   <div className="flex items-center justify-between rounded-lg bg-accent p-3">
                     <span className="text-sm text-muted-foreground">Beta</span>
-                    <span className="text-lg font-bold">{result.metrics.beta}</span>
+                    <span className="text-lg font-bold">{budgetAwareResult.metrics.beta}</span>
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Bảng phân bổ chi tiết</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs text-muted-foreground">
-                    <th className="py-2 text-left font-medium">Mã</th>
-                    <th className="py-2 text-right font-medium">Tỷ trọng</th>
-                    <th className="py-2 text-right font-medium">Cổ phiếu</th>
-                    <th className="py-2 text-right font-medium">Số tiền</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.allocation.map((item) => (
-                    <tr key={item.symbol} className="border-b border-border/50">
-                      <td className="py-2.5 font-semibold">{item.symbol}</td>
-                      <td className="text-right tabular-nums">{item.weight}%</td>
-                      <td className="text-right tabular-nums">{item.shares} cp</td>
-                      <td className="text-right tabular-nums">{formatVND(item.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 gap-4">
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Phân bổ chi tiết & đề xuất rebalance</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Gộp bảng phân bổ và lệnh giao dịch đề xuất để theo dõi mục tiêu đầu tư trong cùng một nơi.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!rebalancePlan ? (
+                  <p className="text-sm text-muted-foreground">Không có dữ liệu danh mục để tạo đề xuất rebalance.</p>
+                ) : rebalancePlan.orders.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Chưa có phân bổ để đề xuất giao dịch.</p>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-lg border border-border/70 bg-accent/40 p-3">
+                        <p className="text-xs text-muted-foreground">Tổng giá trị mua</p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums">{formatVND(rebalancePlan.summary.buyValue)}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-accent/40 p-3">
+                        <p className="text-xs text-muted-foreground">Tổng giá trị bán</p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums">{formatVND(rebalancePlan.summary.sellValue)}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-accent/40 p-3">
+                        <p className="text-xs text-muted-foreground">Dòng tiền ròng</p>
+                        <p className="mt-1 text-sm font-semibold tabular-nums">{formatVND(rebalancePlan.summary.netCashflow)}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-accent/40 p-3">
+                        <p className="text-xs text-muted-foreground">Số lệnh đề xuất</p>
+                        <p className="mt-1 text-sm font-semibold">{rebalancePlan.orders.length} lệnh</p>
+                      </div>
+                    </div>
 
-          {result.backtest.length > 0 && (
+                    <div className="overflow-x-auto rounded-lg border border-border/60">
+                      <table className="w-full min-w-[860px] text-sm">
+                        <thead>
+                          <tr className="border-b border-border text-xs text-muted-foreground">
+                            <th className="px-3 py-2 text-left font-medium">Mã</th>
+                            <th className="px-3 py-2 text-right font-medium">Tỷ trọng</th>
+                            <th className="px-3 py-2 text-right font-medium">CP mục tiêu</th>
+                            <th className="px-3 py-2 text-right font-medium">Giá trị mục tiêu</th>
+                            <th className="px-3 py-2 text-center font-medium">Lệnh</th>
+                            <th className="px-3 py-2 text-right font-medium">Khối lượng</th>
+                            <th className="px-3 py-2 text-right font-medium">Giá trị lệnh</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mergedAllocationRows.map((item) => {
+                            const actionLabel = item.action === "BUY"
+                              ? "MUA"
+                              : item.action === "SELL"
+                                ? "BÁN"
+                                : "GIỮ";
+
+                            return (
+                              <tr key={item.symbol} className="border-b border-border/50">
+                                <td className="px-3 py-2.5 font-semibold">{item.symbol}</td>
+                                <td className="px-3 text-right tabular-nums">{item.weight}%</td>
+                                <td className="px-3 text-right tabular-nums">{item.shares} cp</td>
+                                <td className="px-3 text-right tabular-nums">{formatVND(item.amount)}</td>
+                                <td className="px-3 text-center">
+                                  <span
+                                    className={cn(
+                                      "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                      item.action === "BUY"
+                                        ? "bg-emerald-500/15 text-emerald-400"
+                                        : item.action === "SELL"
+                                          ? "bg-rose-500/15 text-rose-400"
+                                          : "bg-slate-500/15 text-slate-300",
+                                    )}
+                                  >
+                                    {actionLabel}
+                                  </span>
+                                </td>
+                                <td className="px-3 text-right tabular-nums">
+                                  {item.action === "HOLD" ? "-" : `${item.tradeShares} cp`}
+                                </td>
+                                <td className="px-3 text-right tabular-nums">
+                                  {item.action === "HOLD" ? "-" : formatVND(item.orderAmount)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Báo cáo trực quan</CardTitle>
+                <p className="text-xs text-muted-foreground">Biểu đồ được cập nhật theo phân bổ tối ưu mới nhất.</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                  <div className="rounded-lg border border-border/60 bg-accent/30 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phân bổ giá trị đề xuất</p>
+                    {reportAllocationData.length === 0 ? (
+                      <p className="mt-3 text-sm text-muted-foreground">Chưa có dữ liệu phân bổ để dựng biểu đồ.</p>
+                    ) : (
+                      <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-[190px_minmax(0,1fr)] md:items-center">
+                        <div className="h-[165px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={reportAllocationData}
+                                dataKey="amount"
+                                nameKey="symbol"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={42}
+                                outerRadius={68}
+                                paddingAngle={2}
+                              >
+                                {reportAllocationData.map((item, index) => (
+                                  <Cell key={item.symbol} fill={REPORT_COLORS[index % REPORT_COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{
+                                  background: "hsl(215, 25%, 11%)",
+                                  border: "1px solid hsl(216, 14%, 22%)",
+                                  borderRadius: "8px",
+                                  color: "hsl(213, 27%, 92%)",
+                                  fontSize: "12px",
+                                }}
+                                formatter={(value: number) => [formatVND(value), "Giá trị"]}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          {reportAllocationData.map((item, index) => (
+                            <div key={item.symbol} className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: REPORT_COLORS[index % REPORT_COLORS.length] }}
+                                />
+                                <span className="font-medium">{item.symbol}</span>
+                                <span className="text-muted-foreground">{item.shares} cp</span>
+                              </div>
+                              <span className="tabular-nums text-muted-foreground">{formatVND(item.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-border/60 bg-accent/30 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tổng quan chỉ số tối ưu</p>
+                    {reportMetricChartData.length === 0 ? (
+                      <p className="mt-3 text-sm text-muted-foreground">Chưa có dữ liệu để dựng biểu đồ chỉ số.</p>
+                    ) : (
+                      <div className="mt-2 h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={reportMetricChartData}>
+                            <XAxis dataKey="metric" tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }} />
+                            <YAxis tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }} />
+                            <Tooltip
+                              contentStyle={{
+                                background: "hsl(215, 25%, 11%)",
+                                border: "1px solid hsl(216, 14%, 22%)",
+                                borderRadius: "8px",
+                                color: "hsl(213, 27%, 92%)",
+                                fontSize: "12px",
+                              }}
+                              formatter={(value: number, name: string) => [`${value.toFixed(2)}`, name]}
+                            />
+                            <Bar dataKey="value" fill="hsl(205, 71%, 52%)" radius={[3, 3, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-accent/30 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Khối lượng cổ phiếu mục tiêu
+                  </p>
+                  {reportShareChartData.length === 0 ? (
+                    <p className="mt-3 text-sm text-muted-foreground">Chưa có dữ liệu để dựng biểu đồ khối lượng cổ phiếu.</p>
+                  ) : (
+                    <div className="mt-2 h-[220px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={reportShareChartData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(216, 14%, 22%)" />
+                          <XAxis type="number" tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }} />
+                          <YAxis
+                            type="category"
+                            dataKey="symbol"
+                            width={48}
+                            tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(215, 25%, 11%)",
+                              border: "1px solid hsl(216, 14%, 22%)",
+                              borderRadius: "8px",
+                              color: "hsl(213, 27%, 92%)",
+                              fontSize: "12px",
+                            }}
+                            formatter={(value: number) => [`${value} cp`, "Khối lượng"]}
+                          />
+                          <Bar dataKey="shares" fill="hsl(32, 95%, 52%)" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-accent/30 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    So sánh tỷ trọng và giá trị theo mã
+                  </p>
+                  {reportAllocationData.length === 0 ? (
+                    <p className="mt-3 text-sm text-muted-foreground">Chưa có dữ liệu để so sánh tỷ trọng và giá trị.</p>
+                  ) : (
+                    <div className="mt-2 h-[220px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={reportAllocationData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(216, 14%, 22%)" />
+                          <XAxis dataKey="symbol" tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }} />
+                          <YAxis
+                            yAxisId="left"
+                            tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }}
+                            tickFormatter={(value: number) => `${value}%`}
+                          />
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }}
+                            tickFormatter={(value: number) => `${value}tr`}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(215, 25%, 11%)",
+                              border: "1px solid hsl(216, 14%, 22%)",
+                              borderRadius: "8px",
+                              color: "hsl(213, 27%, 92%)",
+                              fontSize: "12px",
+                            }}
+                            formatter={(value: number, name: string) => {
+                              if (name === "Tỷ trọng") {
+                                return [`${Number(value).toFixed(2)}%`, name];
+                              }
+
+                              return [`${Number(value).toFixed(2)} triệu`, name];
+                            }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: "12px" }} />
+                          <Bar yAxisId="left" dataKey="weight" name="Tỷ trọng" fill="hsl(131, 45%, 40%)" radius={[3, 3, 0, 0]} />
+                          <Bar
+                            yAxisId="right"
+                            dataKey="amountInMillions"
+                            name="Giá trị (triệu)"
+                            fill="hsl(205, 71%, 52%)"
+                            radius={[3, 3, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-accent/30 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Khoảng cách lợi nhuận với benchmark
+                  </p>
+                  {reportBacktestSpreadData.length === 0 ? (
+                    <p className="mt-3 text-sm text-muted-foreground">Chưa có dữ liệu backtest để so sánh benchmark.</p>
+                  ) : (
+                    <div className="mt-2 h-[180px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={reportBacktestSpreadData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(216, 14%, 22%)" />
+                          <XAxis dataKey="day" tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }} />
+                          <YAxis tick={{ fill: "hsl(215, 10%, 55%)", fontSize: 11 }} />
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(215, 25%, 11%)",
+                              border: "1px solid hsl(216, 14%, 22%)",
+                              borderRadius: "8px",
+                              color: "hsl(213, 27%, 92%)",
+                              fontSize: "12px",
+                            }}
+                            formatter={(value: number) => [`${Number(value).toFixed(2)} điểm`, "Portfolio - Benchmark"]}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="spread"
+                            stroke="hsl(32, 95%, 52%)"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Portfolio - Benchmark"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {budgetAwareResult.backtest.length > 0 && (
             <Card className="border-border bg-card">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Backtest - Equity Curve</CardTitle>
@@ -576,7 +1007,7 @@ export default function OptimizePage() {
               <CardContent>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={result.backtest}>
+                    <AreaChart data={budgetAwareResult.backtest}>
                       <defs>
                         <linearGradient id="colorPortfolio" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="hsl(131, 45%, 40%)" stopOpacity={0.2} />

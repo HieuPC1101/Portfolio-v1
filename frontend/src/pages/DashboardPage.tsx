@@ -7,11 +7,22 @@ import { useDashboardQuery } from "@/hooks/useDashboardQuery";
 import { dashboardMock } from "@/mocks/dashboard.mock";
 import type { DashboardData, TopMover } from "@/types/dashboard";
 import { Activity, BarChart3, DollarSign, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { useEffect, useState } from "react";
+import { Area, Bar, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 
 const MAX_TOP_MOVER_ROWS = 10;
+const TREND_SYMBOL_ORDER = ["VNINDEX", "VN30", "VN30F1M"] as const;
+
+type TrendSymbol = (typeof TREND_SYMBOL_ORDER)[number];
+
+function formatMatchedVolume(value: number | null): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "--";
+  }
+
+  return Math.round(value).toLocaleString("vi-VN");
+}
 
 function capTopMovers(stocks: TopMover[]): TopMover[] {
   return stocks.slice(0, MAX_TOP_MOVER_ROWS);
@@ -109,6 +120,7 @@ function TopMoverSection({
 export default function DashboardPage() {
   const { data, isPending, isError, refetch, isFetching, dataUpdatedAt } = useDashboardQuery();
   const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [selectedTrendSymbol, setSelectedTrendSymbol] = useState<TrendSymbol>("VNINDEX");
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -117,6 +129,47 @@ export default function DashboardPage() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  const trendCards = useMemo(
+    () =>
+      TREND_SYMBOL_ORDER
+        .map((symbol) => {
+          const series = (data?.chart ?? [])
+            .filter((point) => point.symbol === symbol)
+            .sort((a, b) => a.day - b.day);
+
+          if (series.length === 0) {
+            return null;
+          }
+
+          const latest = series[series.length - 1];
+          const previous = series[series.length - 2] ?? latest;
+          const change = latest.value - previous.value;
+          const changePercent = previous.value !== 0 ? (change / previous.value) * 100 : 0;
+
+          return {
+            symbol,
+            value: latest.value,
+            change,
+            changePercent,
+            volume: latest.volume,
+            series,
+          };
+        })
+        .filter((card): card is NonNullable<typeof card> => card !== null),
+    [data?.chart],
+  );
+
+  useEffect(() => {
+    if (trendCards.length === 0) {
+      return;
+    }
+
+    const hasSelectedCard = trendCards.some((card) => card.symbol === selectedTrendSymbol);
+    if (!hasSelectedCard) {
+      setSelectedTrendSymbol(trendCards[0].symbol);
+    }
+  }, [selectedTrendSymbol, trendCards]);
 
   if (isPending) {
     return (
@@ -130,7 +183,6 @@ export default function DashboardPage() {
     return <div className="text-sm text-muted-foreground">Không thể tải dữ liệu.</div>;
   }
 
-  const hasIndices = data.indices.length > 0;
   const {
     topGainers: visibleTopGainers,
     topLosers: visibleTopLosers,
@@ -159,6 +211,15 @@ export default function DashboardPage() {
     hour12: false,
   }).format(currentTime);
 
+  const selectedTrendCard = trendCards.find((card) => card.symbol === selectedTrendSymbol) ?? trendCards[0] ?? null;
+  const selectedTrendChartData = selectedTrendCard
+    ? selectedTrendCard.series.map((point) => ({
+        ...point,
+        matchedVolume: point.volume ?? 0,
+      }))
+    : [];
+  const selectedTrendColor = selectedTrendCard && selectedTrendCard.change < 0 ? "hsl(0, 72%, 63%)" : "hsl(131, 45%, 40%)";
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -184,73 +245,93 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {hasIndices ? (
-          data.indices.map((idx) => (
-            <Card key={idx.name} className="bg-card border-border">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start">
-                  <p className="text-sm text-muted-foreground">{idx.name}</p>
-                  <PercentBadge value={idx.changePercent} />
-                </div>
-                <p className="text-xl font-bold mt-2 tabular-nums">{idx.value.toLocaleString("vi-VN")}</p>
-                <p className={`text-xs mt-1 tabular-nums ${idx.change > 0 ? "text-stock-up" : "text-stock-down"}`}>
-                  {idx.change > 0 ? "+" : ""}
-                  {idx.change.toFixed(2)}
-                </p>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <div className="col-span-full text-sm text-muted-foreground">Chưa có dữ liệu chỉ số.</div>
-        )}
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2 bg-card border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">VN-Index (30 ngày)</CardTitle>
+            <CardTitle className="text-base">Diễn biến thị trường</CardTitle>
           </CardHeader>
           <CardContent>
-            {data.chart.length > 0 ? (
-              <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.chart} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <defs>
-                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(131, 45%, 40%)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(131, 45%, 40%)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey="label"
-                      axisLine={{ stroke: "hsl(216, 14%, 22%)" }}
-                      tickLine={false}
-                      tick={{ fill: "hsl(215, 12%, 65%)", fontSize: 11 }}
-                      tickMargin={8}
-                      minTickGap={24}
-                    />
-                    <YAxis hide domain={["auto", "auto"]} />
-                    <Tooltip
-                      contentStyle={{
-                        background: "hsl(215, 25%, 11%)",
-                        border: "1px solid hsl(216, 14%, 22%)",
-                        borderRadius: "8px",
-                        color: "hsl(213, 27%, 92%)",
-                        fontSize: "12px",
-                      }}
-                      labelFormatter={(label: string) => `Ngày ${label}`}
-                      formatter={(value: number) => [value.toFixed(2), "VN-Index"]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="hsl(131, 45%, 40%)"
-                      strokeWidth={2}
-                      fill="url(#colorValue)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+            {trendCards.length > 0 && selectedTrendCard ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {trendCards.map((card) => {
+                    const isSelected = selectedTrendCard.symbol === card.symbol;
+                    const isUp = card.change >= 0;
+
+                    return (
+                      <button
+                        key={card.symbol}
+                        type="button"
+                        onClick={() => setSelectedTrendSymbol(card.symbol)}
+                        className={`rounded-lg border p-3 text-left transition-colors ${
+                          isSelected
+                            ? "border-primary/60 bg-primary/10"
+                            : "border-border/70 bg-accent/20 hover:bg-accent/40"
+                        }`}
+                      >
+                        <p className="text-xs font-semibold text-muted-foreground">{card.symbol}</p>
+                        <p className="mt-1 text-lg font-bold tabular-nums">{card.value.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}</p>
+                        <p className={`text-xs tabular-nums ${isUp ? "text-stock-up" : "text-stock-down"}`}>
+                          {isUp ? "+" : ""}
+                          {card.change.toFixed(2)} ({isUp ? "+" : ""}
+                          {card.changePercent.toFixed(2)}%)
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          KL khớp: <span className="tabular-nums text-foreground">{formatMatchedVolume(card.volume)}</span>
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={selectedTrendChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                      <defs>
+                        <linearGradient id="trendValueGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={selectedTrendColor} stopOpacity={0.32} />
+                          <stop offset="95%" stopColor={selectedTrendColor} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis
+                        dataKey="label"
+                        axisLine={{ stroke: "hsl(216, 14%, 22%)" }}
+                        tickLine={false}
+                        tick={{ fill: "hsl(215, 12%, 65%)", fontSize: 11 }}
+                        tickMargin={8}
+                        minTickGap={24}
+                      />
+                      <YAxis yAxisId="price" hide domain={["auto", "auto"]} />
+                      <YAxis yAxisId="volume" hide domain={[0, "auto"]} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(215, 25%, 11%)",
+                          border: "1px solid hsl(216, 14%, 22%)",
+                          borderRadius: "8px",
+                          color: "hsl(213, 27%, 92%)",
+                          fontSize: "12px",
+                        }}
+                        labelFormatter={(label: string) => `Ngày ${label}`}
+                        formatter={(value: number, name: string) => {
+                          if (name === "KL khớp") {
+                            return [formatMatchedVolume(value), "KL khớp"];
+                          }
+                          return [value.toLocaleString("vi-VN", { maximumFractionDigits: 2 }), selectedTrendCard.symbol];
+                        }}
+                      />
+                      <Bar yAxisId="volume" dataKey="matchedVolume" name="KL khớp" fill="hsl(215, 16%, 52%)" fillOpacity={0.22} radius={[2, 2, 0, 0]} />
+                      <Area
+                        yAxisId="price"
+                        type="monotone"
+                        dataKey="value"
+                        name={selectedTrendCard.symbol}
+                        stroke={selectedTrendColor}
+                        strokeWidth={2}
+                        fill="url(#trendValueGradient)"
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">Chưa có dữ liệu biểu đồ.</div>
@@ -272,13 +353,15 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground">Đã đầu tư</p>
                 <p className="text-sm font-medium">{formatVND(data.summary.totalInvested)}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Lãi/Lỗ</p>
-                <p className={`text-sm font-medium ${data.summary.pnl >= 0 ? "text-stock-up" : "text-stock-down"}`}>
-                  {data.summary.pnl >= 0 ? "+" : ""}
-                  {formatVND(data.summary.pnl)}
-                </p>
-              </div>
+              {data.summary.pnl !== 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Lãi/Lỗ</p>
+                  <p className={`text-sm font-medium ${data.summary.pnl >= 0 ? "text-stock-up" : "text-stock-down"}`}>
+                    {data.summary.pnl >= 0 ? "+" : ""}
+                    {formatVND(data.summary.pnl)}
+                  </p>
+                </div>
+              )}
             </div>
             <PercentBadge value={data.summary.pnlPercent} className="text-sm" />
             <div className="pt-2 grid grid-cols-2 gap-3">

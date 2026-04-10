@@ -47,6 +47,14 @@ def init_db() -> None:
     This creates all tables defined in models.
     """
     # Import all models here to ensure they're registered
-    from app.models import user, portfolio, optimization, company_info, chat, news  # noqa
+    from app.models import (  # noqa
+        chat,
+        company_info,
+        news,
+        notification,
+        optimization,
+        portfolio,
+        user,
+    )
 
     Base.metadata.create_all(bind=engine)

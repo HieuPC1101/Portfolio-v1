@@ -9,3 +9,7 @@ export interface WatchlistItem {
 export interface WatchlistData {
   items: WatchlistItem[];
 }
+
+export interface WatchlistMutationPayload {
+  symbol: string;
+}

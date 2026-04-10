@@ -1,7 +1,7 @@
 import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiGet } from "@/lib/api";
-import { apiAuthGet } from "@/lib/apiAuth";
 import { dashboardMock } from "@/mocks/dashboard.mock";
+import { getPortfolioList } from "@/repositories/portfolioRepository";
 import type {
   DashboardChartPoint,
   DashboardData,
@@ -15,11 +15,13 @@ interface BackendIndexValue {
   value: number;
   change: number;
   change_percent: number;
+  volume?: number | null;
 }
 
 interface BackendIndices {
   vnindex: BackendIndexValue;
   vn30: BackendIndexValue;
+  vn30f1m?: BackendIndexValue;
   hnx: BackendIndexValue;
   upcom: BackendIndexValue;
 }
@@ -28,7 +30,12 @@ interface BackendHistoryPoint {
   time: string;
   close: number;
   symbol: string;
+  volume?: number | null;
 }
+
+const TREND_SYMBOLS = ["VNINDEX", "VN30", "VN30F1M"] as const;
+
+type TrendSymbol = (typeof TREND_SYMBOLS)[number];
 
 interface BackendMover {
   ticker?: string | null;
@@ -127,18 +134,25 @@ function resolveTopMovers(
   };
 }
 
-interface BackendPortfolio {
-  id: number;
-  total_investment: number;
-  stocks: Array<{ id: number }>;
-}
-
 async function delay(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isVnIndexSymbol(symbol: string): boolean {
-  return symbol.replace(/[^A-Za-z]/g, "").toUpperCase() === "VNINDEX";
+function normalizeSymbol(symbol: string): string {
+  return symbol.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
+
+function toTrendSymbol(symbol: string): TrendSymbol | null {
+  const normalized = normalizeSymbol(symbol);
+  return TREND_SYMBOLS.includes(normalized as TrendSymbol) ? (normalized as TrendSymbol) : null;
+}
+
+function parseVolume(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
 }
 
 function formatDayMonthLabel(time: string, fallbackIndex: number): string {
@@ -155,11 +169,11 @@ function formatDayMonthLabel(time: string, fallbackIndex: number): string {
 }
 
 async function getLiveDashboardData(): Promise<DashboardData> {
-  const [indicesRaw, historyRaw, moversRaw, portfoliosRaw] = await Promise.all([
+  const [indicesRaw, historyRaw, moversRaw, portfolioData] = await Promise.all([
     apiGet<BackendIndices>("/api/v1/market/indices"),
-    apiGet<BackendHistoryPoint[]>("/api/v1/market/indices/history?symbols=VNINDEX&months=1"),
+    apiGet<BackendHistoryPoint[]>(`/api/v1/market/indices/history?symbols=${TREND_SYMBOLS.join(",")}&months=1`),
     apiGet<BackendTopMovers>("/api/v1/market/top-movers?top_n=10"),
-    apiAuthGet<BackendPortfolio[]>("/api/v1/portfolios").catch(() => [] as BackendPortfolio[]),
+    getPortfolioList().catch(() => ({ portfolios: [] })),
   ]);
 
   const indices: MarketIndex[] = [
@@ -189,14 +203,34 @@ async function getLiveDashboardData(): Promise<DashboardData> {
     },
   ];
 
-  const chart: DashboardChartPoint[] = historyRaw
-    .filter((point) => isVnIndexSymbol(point.symbol))
-    .sort((a, b) => a.time.localeCompare(b.time))
-    .map((point, index) => ({
+  const historyBySymbol = new Map<TrendSymbol, BackendHistoryPoint[]>();
+  for (const symbol of TREND_SYMBOLS) {
+    historyBySymbol.set(symbol, []);
+  }
+
+  const sortedHistory = [...historyRaw].sort((a, b) => a.time.localeCompare(b.time));
+  for (const point of sortedHistory) {
+    const symbol = toTrendSymbol(point.symbol);
+    if (!symbol) {
+      continue;
+    }
+    if (typeof point.close !== "number" || !Number.isFinite(point.close)) {
+      continue;
+    }
+    historyBySymbol.get(symbol)?.push(point);
+  }
+
+  const chart: DashboardChartPoint[] = TREND_SYMBOLS.flatMap((symbol) => {
+    const rows = historyBySymbol.get(symbol) ?? [];
+
+    return rows.map((point, index) => ({
       day: index + 1,
       label: formatDayMonthLabel(point.time, index),
       value: point.close,
+      symbol,
+      volume: parseVolume(point.volume),
     }));
+  });
 
   const mappedGainers = mapMovers(moversRaw.gainers);
   const mappedLosers = mapMovers(moversRaw.losers);
@@ -207,14 +241,17 @@ async function getLiveDashboardData(): Promise<DashboardData> {
     topMostActive,
   } = resolveTopMovers(mappedGainers, mappedLosers, mappedMostActive);
 
-  const totalInvested = portfoliosRaw.reduce((sum, portfolio) => sum + Number(portfolio.total_investment), 0);
+  const portfolios = portfolioData.portfolios;
+  const totalInvested = portfolios.reduce((sum, portfolio) => sum + portfolio.totalInvested, 0);
+  const totalValue = portfolios.reduce((sum, portfolio) => sum + portfolio.currentValue, 0);
+  const pnl = totalValue - totalInvested;
   const summary: PortfolioSummary = {
-    totalValue: totalInvested,
+    totalValue,
     totalInvested,
-    pnl: 0,
-    pnlPercent: 0,
-    portfolioCount: portfoliosRaw.length,
-    stockCount: portfoliosRaw.reduce((sum, portfolio) => sum + portfolio.stocks.length, 0),
+    pnl,
+    pnlPercent: totalInvested > 0 ? (pnl / totalInvested) * 100 : 0,
+    portfolioCount: portfolios.length,
+    stockCount: portfolios.reduce((sum, portfolio) => sum + portfolio.holdings.length, 0),
   };
 
   return { indices, topGainers, topLosers, topMostActive, chart, summary };

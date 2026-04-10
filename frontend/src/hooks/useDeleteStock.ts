@@ -14,6 +14,7 @@ export function useDeleteStock() {
     mutationFn: ({ portfolioId, stockId }: DeleteStockArgs) => deletePortfolioStock(portfolioId, stockId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Xóa cổ phiếu thành công");
     },
     onError: (error) => {

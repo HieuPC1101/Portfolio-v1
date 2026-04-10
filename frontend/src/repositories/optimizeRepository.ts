@@ -42,13 +42,42 @@ interface BackendOptimizationRunResponse {
   model_name: string;
   input_symbols: string[];
   total_investment: number;
-  expected_return: number | null;
-  risk_volatility: number | null;
-  sharpe_ratio: number | null;
+  expected_return: number | string | null;
+  risk_volatility: number | string | null;
+  expected_volatility?: number | string | null;
+  expectedReturn?: number | string | null;
+  riskVolatility?: number | string | null;
+  volatility?: number | string | null;
+  sharpe_ratio: number | string | null;
+  sharpeRatio?: number | string | null;
   weights: Record<string, number>;
   shares: Record<string, number>;
   extra_data?: Record<string, unknown> | null;
 }
+
+interface BackendStockPrice {
+  date: string;
+  close?: number | null;
+}
+
+interface BackendStockPriceResponse {
+  data?: {
+    prices?: BackendStockPrice[];
+  } | null;
+}
+
+interface BackendIndexHistoryPoint {
+  time?: string | null;
+  close?: number | null;
+}
+
+interface DatedClosePoint {
+  date: string;
+  close: number;
+}
+
+const BACKTEST_BENCHMARK_SYMBOL = "VNINDEX";
+const DEFAULT_BACKTEST_DAYS = 120;
 
 const stockSearchMockData: OptimizeStockSearchItem[] = [
   { symbol: "VCB", name: "Ngân hàng TMCP Ngoại thương Việt Nam", exchange: "HOSE" },
@@ -114,16 +143,33 @@ function localizeAlgorithmModel(model: BackendOptimizationModel): OptimizeAlgori
   };
 }
 
-function toPercentValue(value: number | null | undefined): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+function toNumber(value: number | string | null | undefined): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function toPercentValue(value: number | string | null | undefined): number {
+  const numericValue = toNumber(value);
+  if (numericValue === undefined) {
     return 0;
   }
 
-  return Math.abs(value) <= 1 ? value * 100 : value;
+  return Math.abs(numericValue) <= 1 ? numericValue * 100 : numericValue;
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+function round(value: number, digits = 2): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
 }
 
 function normalizeWeightPercent(rawWeight: number): number {
@@ -142,6 +188,195 @@ function normalizeSymbols(symbols: string[]): string[] {
   return Array.from(unique);
 }
 
+function formatDateParam(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function resolveBacktestDateRange(startDate?: string, endDate?: string): { start: Date; end: Date } {
+  const parsedEnd = endDate ? new Date(endDate) : new Date();
+  const safeEnd = Number.isNaN(parsedEnd.getTime()) ? new Date() : parsedEnd;
+
+  const parsedStart = startDate ? new Date(startDate) : null;
+  const fallbackStart = new Date(safeEnd);
+  fallbackStart.setDate(safeEnd.getDate() - DEFAULT_BACKTEST_DAYS);
+
+  const safeStart = parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart : fallbackStart;
+
+  if (safeStart.getTime() >= safeEnd.getTime()) {
+    return {
+      start: fallbackStart,
+      end: safeEnd,
+    };
+  }
+
+  return {
+    start: safeStart,
+    end: safeEnd,
+  };
+}
+
+function normalizeDatedClosePoints(points: DatedClosePoint[]): DatedClosePoint[] {
+  return points
+    .filter((point) => Number.isFinite(point.close) && point.close > 0 && Boolean(point.date))
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function normalizeWeightMap(weightsMap: Record<string, number>): Record<string, number> {
+  const entries = Object.entries(weightsMap)
+    .map(([symbol, weight]) => [symbol.toUpperCase(), typeof weight === "number" ? weight : 0] as const)
+    .filter(([, weight]) => Number.isFinite(weight) && weight > 0);
+
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  if (total <= 0) {
+    return {};
+  }
+
+  return Object.fromEntries(entries.map(([symbol, weight]) => [symbol, weight / total]));
+}
+
+function rangeInMonths(start: Date, end: Date): number {
+  const diffMs = Math.max(0, end.getTime() - start.getTime());
+  const diffDays = Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+  return Math.max(1, Math.ceil(diffDays / 30));
+}
+
+function buildBacktestSeriesFromHistory(
+  normalizedWeights: Record<string, number>,
+  priceSeriesBySymbol: Record<string, DatedClosePoint[]>,
+  benchmarkSeries: DatedClosePoint[],
+): OptimizeResultData["backtest"] {
+  if (benchmarkSeries.length < 2) {
+    return [];
+  }
+
+  const benchmarkBase = benchmarkSeries[0].close;
+  if (!Number.isFinite(benchmarkBase) || benchmarkBase <= 0) {
+    return [];
+  }
+
+  const symbols = Object.keys(normalizedWeights)
+    .filter((symbol) => (priceSeriesBySymbol[symbol] ?? []).length > 0);
+
+  if (symbols.length === 0) {
+    return [];
+  }
+
+  const cursors = Object.fromEntries(symbols.map((symbol) => [symbol, 0]));
+  const latestCloseBySymbol = Object.fromEntries(symbols.map((symbol) => [symbol, null as number | null]));
+  const baseCloseBySymbol = Object.fromEntries(symbols.map((symbol) => [symbol, priceSeriesBySymbol[symbol][0].close]));
+
+  const rows = benchmarkSeries.flatMap((benchmarkPoint) => {
+    let weightedRatio = 0;
+    let usedWeight = 0;
+
+    for (const symbol of symbols) {
+      const series = priceSeriesBySymbol[symbol];
+      let cursor = cursors[symbol] as number;
+
+      while (cursor < series.length && series[cursor].date <= benchmarkPoint.date) {
+        latestCloseBySymbol[symbol] = series[cursor].close;
+        cursor += 1;
+      }
+
+      cursors[symbol] = cursor;
+
+      const latestClose = latestCloseBySymbol[symbol];
+      const baseClose = baseCloseBySymbol[symbol] as number;
+      if (
+        typeof latestClose !== "number"
+        || !Number.isFinite(latestClose)
+        || latestClose <= 0
+        || !Number.isFinite(baseClose)
+        || baseClose <= 0
+      ) {
+        continue;
+      }
+
+      const weight = normalizedWeights[symbol] ?? 0;
+      weightedRatio += weight * (latestClose / baseClose);
+      usedWeight += weight;
+    }
+
+    if (usedWeight <= 0 || !Number.isFinite(benchmarkPoint.close) || benchmarkPoint.close <= 0) {
+      return [];
+    }
+
+    return [{
+      portfolio: round((weightedRatio / usedWeight) * 100, 2),
+      benchmark: round((benchmarkPoint.close / benchmarkBase) * 100, 2),
+    }];
+  });
+
+  return rows.map((point, index) => ({
+    day: index + 1,
+    portfolio: point.portfolio,
+    benchmark: point.benchmark,
+  }));
+}
+
+async function fetchSymbolHistory(symbol: string, start: Date, end: Date): Promise<DatedClosePoint[]> {
+  const response = await apiGet<BackendStockPriceResponse>(
+    `/api/v1/market/stock/${encodeURIComponent(symbol)}/price?start_date=${formatDateParam(start)}&end_date=${formatDateParam(end)}`,
+  );
+
+  const rawPrices = response.data?.prices ?? [];
+  const normalized = rawPrices.flatMap((point) => (
+    typeof point.close === "number" && Number.isFinite(point.close) && point.date
+      ? [{ date: point.date, close: point.close } satisfies DatedClosePoint]
+      : []
+  ));
+
+  return normalizeDatedClosePoints(normalized);
+}
+
+async function fetchBenchmarkHistory(start: Date, end: Date): Promise<DatedClosePoint[]> {
+  const months = rangeInMonths(start, end);
+  const response = await apiGet<BackendIndexHistoryPoint[]>(
+    `/api/v1/market/indices/history?symbols=${BACKTEST_BENCHMARK_SYMBOL}&months=${months}`,
+  );
+
+  if (!Array.isArray(response)) {
+    return [];
+  }
+
+  const normalized = response.flatMap((point) => (
+    typeof point.close === "number" && Number.isFinite(point.close) && typeof point.time === "string"
+      ? [{ date: point.time, close: point.close } satisfies DatedClosePoint]
+      : []
+  ));
+
+  return normalizeDatedClosePoints(normalized);
+}
+
+async function buildFallbackBacktest(
+  weightsMap: Record<string, number>,
+  startDate?: string,
+  endDate?: string,
+): Promise<OptimizeResultData["backtest"]> {
+  const normalizedWeights = normalizeWeightMap(weightsMap);
+  const symbols = Object.keys(normalizedWeights);
+
+  if (symbols.length === 0) {
+    return [];
+  }
+
+  const { start, end } = resolveBacktestDateRange(startDate, endDate);
+
+  const benchmarkSeries = await fetchBenchmarkHistory(start, end).catch(() => [] as DatedClosePoint[]);
+  if (benchmarkSeries.length === 0) {
+    return [];
+  }
+
+  const symbolSeriesEntries = await Promise.all(
+    symbols.map(async (symbol) => {
+      const series = await fetchSymbolHistory(symbol, start, end).catch(() => [] as DatedClosePoint[]);
+      return [symbol, series] as const;
+    }),
+  );
+
+  return buildBacktestSeriesFromHistory(normalizedWeights, Object.fromEntries(symbolSeriesEntries), benchmarkSeries);
+}
+
 function getExtraMetric(extraData: Record<string, unknown> | null | undefined, keys: string[]): number | undefined {
   if (!extraData) {
     return undefined;
@@ -149,8 +384,9 @@ function getExtraMetric(extraData: Record<string, unknown> | null | undefined, k
 
   for (const key of keys) {
     const value = extraData[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
+    const numericValue = toNumber(value as number | string | null | undefined);
+    if (numericValue !== undefined) {
+      return numericValue;
     }
   }
 
@@ -196,7 +432,7 @@ function buildResultFromWeights(
   const weights: OptimizeWeight[] = Object.entries(weightsMap)
     .map(([symbol, weight]) => ({
       symbol,
-      weight: round2(normalizeWeightPercent(weight)),
+      weight: round(normalizeWeightPercent(weight), 2),
     }))
     .sort((left, right) => right.weight - left.weight);
 
@@ -314,6 +550,24 @@ export async function calculateOptimization(payload: CalculateOptimizationPayloa
   const cvarRaw = getExtraMetric(response.extra_data, ["cvar", "CVaR", "conditional_var", "Rủi ro CVaR"]);
   const cdarRaw = getExtraMetric(response.extra_data, ["cdar", "CDaR", "conditional_drawdown", "Rủi ro CDaR"]);
   const betaRaw = getExtraMetric(response.extra_data, ["beta", "Beta"]);
+  const expectedReturnRaw = toNumber(response.expected_return)
+    ?? toNumber(response.expectedReturn)
+    ?? getExtraMetric(response.extra_data, ["expected_return", "expectedReturn", "Lợi nhuận kỳ vọng"]);
+  const volatilityRaw = toNumber(response.risk_volatility)
+    ?? toNumber(response.expected_volatility)
+    ?? toNumber(response.riskVolatility)
+    ?? toNumber(response.volatility)
+    ?? getExtraMetric(response.extra_data, [
+      "risk_volatility",
+      "expected_volatility",
+      "riskVolatility",
+      "expectedVolatility",
+      "volatility",
+      "Rủi ro (Độ lệch chuẩn)",
+    ]);
+  const sharpeRaw = toNumber(response.sharpe_ratio)
+    ?? toNumber(response.sharpeRatio)
+    ?? getExtraMetric(response.extra_data, ["sharpe_ratio", "sharpeRatio", "Tỷ lệ Sharpe"]);
   const allocationAmounts = getExtraNumberMap(response.extra_data, ["allocation_amounts", "allocationAmounts"]);
   const latestPrices = getExtraNumberMap(response.extra_data, ["latest_prices", "latestPrices", "Giá mã cổ phiếu"]);
 
@@ -331,21 +585,22 @@ export async function calculateOptimization(payload: CalculateOptimizationPayloa
     : undefined);
 
   const metrics: OptimizeMetricSummary = {
-    expectedReturn: round2(toPercentValue(response.expected_return)),
-    volatility: round2(toPercentValue(response.risk_volatility)),
-    sharpeRatio: round2(response.sharpe_ratio ?? 0),
-    maxDrawdown: maxDrawdownRaw !== undefined ? round2(toPercentValue(maxDrawdownRaw)) : undefined,
-    cvar: cvarRaw !== undefined ? round2(toPercentValue(cvarRaw)) : undefined,
-    cdar: cdarRaw !== undefined ? round2(toPercentValue(cdarRaw)) : undefined,
-    beta: betaRaw !== undefined ? round2(betaRaw) : undefined,
+    expectedReturn: round(toPercentValue(expectedReturnRaw), 4),
+    volatility: round(toPercentValue(volatilityRaw), 4),
+    sharpeRatio: round(sharpeRaw ?? 0, 2),
+    maxDrawdown: maxDrawdownRaw !== undefined ? round(toPercentValue(maxDrawdownRaw), 2) : undefined,
+    cvar: cvarRaw !== undefined ? round(toPercentValue(cvarRaw), 2) : undefined,
+    cdar: cdarRaw !== undefined ? round(toPercentValue(cdarRaw), 2) : undefined,
+    beta: betaRaw !== undefined ? round(betaRaw, 2) : undefined,
   };
+  const backtest = await buildFallbackBacktest(response.weights ?? {}, payload.startDate, payload.endDate);
 
   return buildResultFromWeights(
     response.weights ?? {},
     response.shares ?? {},
     payload.budget,
     metrics,
-    [],
+    backtest,
     normalizedAllocationAmounts,
   );
 }

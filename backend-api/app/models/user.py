@@ -45,6 +45,16 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     chat_feedback = relationship("ChatFeedback", back_populates="user")
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    notification_rules = relationship(
+        "NotificationRule",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, username='{self.username}')>"
@@ -63,6 +73,9 @@ class UserSettings(Base):
     preferred_market = Column(String(20), default="HOSE")
     risk_tolerance = Column(String(20), default="moderate")
     notifications_enabled = Column(Boolean, default=True)
+    notification_price_enabled = Column(Boolean, default=True)
+    notification_news_enabled = Column(Boolean, default=True)
+    notification_portfolio_enabled = Column(Boolean, default=True)
     theme = Column(String(20), default="light")
     investment_horizon = Column(String(30), nullable=True)
     preferred_sectors = Column(ARRAY(String), nullable=True)

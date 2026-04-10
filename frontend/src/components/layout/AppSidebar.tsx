@@ -7,7 +7,6 @@ import {
   TrendingUp,
   Newspaper,
   MessageCircle,
-  Eye,
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,10 +23,9 @@ import {
 
 const mainItems = [
   { title: "Tổng quan", url: "/", icon: LayoutDashboard },
+  { title: "Cổ phiếu", url: "/thi-truong", icon: TrendingUp },
   { title: "Danh mục", url: "/danh-muc", icon: Briefcase },
   { title: "Tối ưu hóa", url: "/toi-uu", icon: BarChart3 },
-  { title: "Thị trường", url: "/thi-truong", icon: TrendingUp },
-  { title: "Watchlist", url: "/watchlist", icon: Eye },
   { title: "Tin tức", url: "/tin-tuc", icon: Newspaper },
 ];
 
@@ -38,7 +36,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-border">
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
             <TrendingUp className="h-4 w-4 text-primary-foreground" />

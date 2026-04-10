@@ -127,3 +127,64 @@ class StockSearchResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class StockOverviewResponse(BaseModel):
+    symbol: str
+    company_name: Optional[str] = None
+    exchange: Optional[str] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+    market_cap: Optional[float] = None
+    shares_outstanding: Optional[float] = None
+    free_float: Optional[float] = None
+    listing_date: Optional[str] = None
+    headquarters: Optional[str] = None
+    employee_count: Optional[int] = None
+    business_summary: Optional[str] = None
+    latest_highlights: List[str] = Field(default_factory=list)
+    as_of_date: Optional[str] = None
+    source: Optional[str] = None
+
+
+class StockFinancialPeriod(BaseModel):
+    period_label: str
+    year: Optional[int] = None
+    quarter: Optional[int] = None
+    revenue: Optional[float] = None
+    gross_profit: Optional[float] = None
+    operating_profit: Optional[float] = None
+    net_income: Optional[float] = None
+    total_assets: Optional[float] = None
+    total_liabilities: Optional[float] = None
+    equity: Optional[float] = None
+    total_debt: Optional[float] = None
+    cash_and_cash_equivalents: Optional[float] = None
+    operating_cash_flow: Optional[float] = None
+    investing_cash_flow: Optional[float] = None
+    financing_cash_flow: Optional[float] = None
+    free_cash_flow: Optional[float] = None
+
+
+class StockFinancialsResponse(BaseModel):
+    symbol: str
+    period: str
+    items: List[StockFinancialPeriod] = Field(default_factory=list)
+    as_of_date: Optional[str] = None
+    source: Optional[str] = None
+
+
+class StockRatiosResponse(BaseModel):
+    symbol: str
+    pe: Optional[float] = None
+    pb: Optional[float] = None
+    ev_ebitda: Optional[float] = None
+    gross_margin: Optional[float] = None
+    net_margin: Optional[float] = None
+    roe: Optional[float] = None
+    roa: Optional[float] = None
+    debt_to_equity: Optional[float] = None
+    as_of_date: Optional[str] = None
+    reporting_period: Optional[str] = None
+    quality_flags: List[str] = Field(default_factory=list)
+    source: Optional[str] = None

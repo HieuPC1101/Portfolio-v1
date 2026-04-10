@@ -348,6 +348,18 @@ class OptimizationService:
             "allocation_amounts": allocation_amounts,
         }
 
+        expected_return = cls._as_float(model_result.get("Lợi nhuận kỳ vọng"))
+        if expected_return is not None:
+            extra_data["expected_return"] = expected_return
+
+        expected_volatility = cls._as_float(model_result.get("Rủi ro (Độ lệch chuẩn)"))
+        if expected_volatility is not None:
+            extra_data["expected_volatility"] = expected_volatility
+
+        sharpe_ratio = cls._as_float(model_result.get("Tỷ lệ Sharpe"))
+        if sharpe_ratio is not None:
+            extra_data["sharpe_ratio"] = sharpe_ratio
+
         cvar = cls._as_float(model_result.get("Rủi ro CVaR"))
         if cvar is not None:
             extra_data["cvar"] = cvar

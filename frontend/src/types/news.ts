@@ -4,6 +4,8 @@ export interface NewsItem {
   summary: string;
   source: string;
   time: string;
+  publishedAt?: string | null;
+  symbols?: string[];
   category: string;
   url?: string;
 }

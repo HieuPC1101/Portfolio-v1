@@ -9,6 +9,7 @@ export function useDeletePortfolio() {
     mutationFn: (id: string) => deletePortfolio(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Xóa danh mục thành công");
     },
     onError: (error) => {

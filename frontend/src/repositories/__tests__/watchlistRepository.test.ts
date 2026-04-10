@@ -5,7 +5,7 @@ vi.mock("@/config/runtime", () => ({
   MOCK_API_DELAY_MS: 0,
 }));
 
-import { getWatchlist } from "@/repositories/watchlistRepository";
+import { addWatchlistSymbol, getWatchlist, removeWatchlistSymbol } from "@/repositories/watchlistRepository";
 
 describe("getWatchlist", () => {
   it("trả về watchlist data với items", async () => {
@@ -14,5 +14,17 @@ describe("getWatchlist", () => {
     expect(data.items.length).toBeGreaterThan(0);
     expect(data.items[0]).toHaveProperty("symbol");
     expect(data.items[0]).toHaveProperty("percent");
+  });
+
+  it("thêm và xóa mã trong watchlist mock", async () => {
+    const symbol = "BIDX";
+
+    await addWatchlistSymbol({ symbol });
+    const afterAdd = await getWatchlist();
+    expect(afterAdd.items.some((item) => item.symbol === symbol)).toBe(true);
+
+    await removeWatchlistSymbol({ symbol });
+    const afterRemove = await getWatchlist();
+    expect(afterRemove.items.some((item) => item.symbol === symbol)).toBe(false);
   });
 });

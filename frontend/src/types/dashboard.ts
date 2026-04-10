@@ -17,6 +17,8 @@ export interface DashboardChartPoint {
   day: number;
   label: string;
   value: number;
+  symbol: string;
+  volume: number | null;
 }
 
 export interface PortfolioSummary {

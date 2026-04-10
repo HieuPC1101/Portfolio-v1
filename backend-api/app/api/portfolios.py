@@ -18,9 +18,16 @@ from app.schemas.portfolio import (
     WatchlistUpdate,
     WatchlistResponse,
     WatchlistStockCreate,
+    WatchlistStockResponse,
+)
+from app.services.notification_service import NotificationService
+from app.services.portfolio_notification_service import (
+    build_watchlist_notification_content,
+    should_emit_portfolio_notification,
 )
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolio Management"])
+notification_service = NotificationService()
 
 
 # ========== Portfolio CRUD ==========
@@ -298,12 +305,10 @@ def create_watchlist(
     Create a new watchlist for the current user.
 
     - **name**: Watchlist name
-    - **description**: Optional description
     """
     watchlist = Watchlist(
         user_id=current_user.id,
         name=watchlist_data.name,
-        description=watchlist_data.description,
     )
 
     db.add(watchlist)
@@ -413,7 +418,11 @@ def delete_watchlist(
     db.commit()
 
 
-@router.post("/watchlists/{watchlist_id}/stocks", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/watchlists/{watchlist_id}/stocks",
+    response_model=WatchlistStockResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def add_stock_to_watchlist(
     watchlist_id: int,
     stock_data: WatchlistStockCreate,
@@ -461,6 +470,21 @@ def add_stock_to_watchlist(
     db.add(stock)
     db.commit()
     db.refresh(stock)
+
+    settings = notification_service.get_settings(db, user_id=current_user.id)
+    if should_emit_portfolio_notification(settings):
+        title, message, payload = build_watchlist_notification_content(
+            symbol=stock.symbol,
+            action="added",
+        )
+        notification_service.create_notification(
+            db,
+            user_id=current_user.id,
+            type="portfolio_alert",
+            title=title,
+            message=message,
+            payload=payload,
+        )
 
     return stock
 

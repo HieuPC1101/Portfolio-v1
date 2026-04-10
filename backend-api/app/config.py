@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     vnstock_cache_expire_seconds: int = 300
     default_market: str = "HOSE"
 
+    # Notifications scheduler
+    notification_scheduler_enabled: bool = True
+    notification_scheduler_interval_seconds: int = 300
+    notification_news_lookback_hours: int = 24
+
     # Logging
     log_level: str = "INFO"
 

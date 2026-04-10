@@ -94,6 +94,9 @@ class UserSettingsBase(BaseModel):
     investment_horizon: Optional[str] = None
     preferred_sectors: Optional[list[str]] = None
     notifications_enabled: Optional[bool] = True
+    notification_price_enabled: Optional[bool] = True
+    notification_news_enabled: Optional[bool] = True
+    notification_portfolio_enabled: Optional[bool] = True
     theme: Optional[str] = "light"
 
 

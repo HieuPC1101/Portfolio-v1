@@ -152,4 +152,93 @@ describe("optimizeRepository", () => {
       { symbol: "FPT", weight: 35, shares: 320, amount: 28800000 },
     ]);
   });
+
+  it("xử lý metric dạng chuỗi số từ backend", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({
+          id: 13,
+          user_id: 1,
+          model_name: "markowitz",
+          input_symbols: ["ACB", "BSR"],
+          total_investment: 10000000,
+          expected_return: "0.1425",
+          risk_volatility: "0.091",
+          sharpe_ratio: "1.32",
+          weights: {
+            ACB: 0.87,
+            BSR: 0.13,
+          },
+          shares: {
+            ACB: 361,
+            BSR: 51,
+          },
+          leftover_cash: 0,
+          extra_data: {},
+          created_at: "2026-04-10T03:00:00.000Z",
+        }),
+      }),
+    );
+
+    const result = await calculateOptimization({
+      stocks: ["ACB", "BSR"],
+      algorithm: "markowitz",
+      budget: 10000000,
+      constraints: {
+        targetReturn: 12,
+      },
+    });
+
+    expect(result.metrics.expectedReturn).toBe(14.25);
+    expect(result.metrics.volatility).toBe(9.1);
+    expect(result.metrics.sharpeRatio).toBe(1.32);
+  });
+
+  it("fallback metric từ extra_data khi field top-level bị null", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({
+          id: 14,
+          user_id: 1,
+          model_name: "markowitz",
+          input_symbols: ["ACB", "BSR"],
+          total_investment: 10000000,
+          expected_return: null,
+          risk_volatility: null,
+          sharpe_ratio: null,
+          weights: {
+            ACB: 0.87,
+            BSR: 0.13,
+          },
+          shares: {
+            ACB: 361,
+            BSR: 51,
+          },
+          leftover_cash: 0,
+          extra_data: {
+            expected_return: "0.153",
+            expected_volatility: "0.102",
+            sharpe_ratio: "1.31",
+          },
+          created_at: "2026-04-10T03:30:00.000Z",
+        }),
+      }),
+    );
+
+    const result = await calculateOptimization({
+      stocks: ["ACB", "BSR"],
+      algorithm: "markowitz",
+      budget: 10000000,
+    });
+
+    expect(result.metrics.expectedReturn).toBe(15.3);
+    expect(result.metrics.volatility).toBe(10.2);
+    expect(result.metrics.sharpeRatio).toBe(1.31);
+  });
 });

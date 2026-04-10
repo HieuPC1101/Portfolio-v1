@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import html
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -147,6 +148,8 @@ _EXCLUDED_KW = [
     "chứng khoán mỹ",
 ]
 
+_BROKEN_NUMERIC_ENTITY_RE = re.compile(r"(?<!&)#(x[\da-fA-F]+|\d+);")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -159,17 +162,33 @@ def _parse_date(entry) -> Optional[datetime]:
         ts = getattr(entry, attr, None)
         if ts:
             try:
-                return datetime(*ts[:6])
+                return datetime(*ts[:6], tzinfo=timezone.utc).replace(tzinfo=None)
             except Exception:
                 pass
     for attr in ("published", "updated"):
         raw = getattr(entry, attr, None)
         if raw:
             try:
-                return parsedate_to_datetime(raw).replace(tzinfo=None)
+                parsed = parsedate_to_datetime(raw)
+                if parsed.tzinfo is None:
+                    return parsed
+                return parsed.astimezone(timezone.utc).replace(tzinfo=None)
             except Exception:
                 pass
     return None
+
+
+def _decode_entities(value: str) -> str:
+    if not value:
+        return ""
+
+    decoded = _BROKEN_NUMERIC_ENTITY_RE.sub(r"&#\1;", value)
+    for _ in range(3):
+        next_value = html.unescape(decoded)
+        if next_value == decoded:
+            break
+        decoded = next_value
+    return decoded
 
 
 def _is_vn_stock(title: str, summary: str) -> bool:
@@ -202,13 +221,16 @@ def _fetch_rss_source(source_name: str, urls: List[str]) -> List[dict]:
                     continue
                 seen_urls.add(link)
 
-                title = getattr(entry, "title", "") or ""
+                title = _decode_entities(getattr(entry, "title", "") or "")
                 raw_summary = (
                     getattr(entry, "summary", "")
                     or getattr(entry, "description", "")
                     or ""
                 )
-                summary = BeautifulSoup(raw_summary, "html.parser").get_text(strip=True)
+                summary = BeautifulSoup(raw_summary, "html.parser").get_text(
+                    " ", strip=True
+                )
+                summary = _decode_entities(summary)
                 summary = summary[:500] + "..." if len(summary) > 500 else summary
 
                 if not _is_vn_stock(title, summary):
@@ -300,15 +322,16 @@ def fetch_stock_news_from_sources(symbol: str, limit: int = 20) -> List[dict]:
                     if link in seen_urls:
                         continue
 
-                    title = getattr(entry, "title", "") or ""
+                    title = _decode_entities(getattr(entry, "title", "") or "")
                     raw_summary = (
                         getattr(entry, "summary", "")
                         or getattr(entry, "description", "")
                         or ""
                     )
                     summary = BeautifulSoup(raw_summary, "html.parser").get_text(
-                        strip=True
+                        " ", strip=True
                     )
+                    summary = _decode_entities(summary)
                     summary = summary[:500] + "..." if len(summary) > 500 else summary
 
                     combined_lower = f"{title} {summary}".lower()

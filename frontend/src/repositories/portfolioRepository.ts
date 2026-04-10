@@ -1,6 +1,7 @@
 import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiAuthDelete, apiAuthGet, apiAuthPost, apiAuthPut } from "@/lib/apiAuth";
 import { portfolioMock } from "@/mocks/portfolio.mock";
+import { getStockOHLC } from "@/repositories/marketRepository";
 import type {
   AddStockPayload,
   CreatePortfolioPayload,
@@ -60,14 +61,17 @@ function clone<T>(value: T): T {
 let mockState: PortfolioListData = clone(portfolioMock);
 
 function recalculatePortfolio(portfolio: PortfolioItem): PortfolioItem {
-  const totalInvested = portfolio.holdings.reduce((sum, holding) => sum + holding.avgPrice * holding.shares, 0);
-  const currentValue = portfolio.holdings.reduce((sum, holding) => sum + holding.currentPrice * holding.shares, 0);
+  const totalInvested = Number(portfolio.totalInvested ?? 0);
+  const holdingsCostBasis = portfolio.holdings.reduce((sum, holding) => sum + holding.avgPrice * holding.shares, 0);
+  const holdingsCurrentValue = portfolio.holdings.reduce((sum, holding) => sum + holding.currentPrice * holding.shares, 0);
+  const remainingBudget = totalInvested - holdingsCostBasis;
+  const currentValue = holdingsCurrentValue + remainingBudget;
   const pnl = currentValue - totalInvested;
   const pnlPercent = totalInvested > 0 ? (pnl / totalInvested) * 100 : 0;
 
   const holdings = portfolio.holdings.map((holding) => {
     const positionValue = holding.currentPrice * holding.shares;
-    const weight = currentValue > 0 ? Math.round((positionValue / currentValue) * 100) : 0;
+    const weight = holdingsCurrentValue > 0 ? Math.round((positionValue / holdingsCurrentValue) * 100) : 0;
     return { ...holding, weight };
   });
 
@@ -128,16 +132,20 @@ function mapHolding(stock: BackendPortfolioStock, totalInvested: number): Portfo
 }
 
 function mapPortfolio(portfolio: BackendPortfolio): PortfolioItem {
-  const fallbackInvestment = portfolio.stocks.reduce(
+  const investedFromHoldings = portfolio.stocks.reduce(
     (sum, stock) => sum + Number(stock.purchase_price ?? 0) * Number(stock.shares ?? 0),
     0,
   );
 
-  const totalInvested = Number(portfolio.total_investment ?? 0) > 0
-    ? Number(portfolio.total_investment)
-    : fallbackInvestment;
+  const configuredInvestment = Number(portfolio.total_investment ?? 0);
+  const totalInvested = configuredInvestment > 0
+    ? configuredInvestment
+    : investedFromHoldings;
+  const holdingWeightBase = investedFromHoldings > 0
+    ? investedFromHoldings
+    : totalInvested;
 
-  const holdings: PortfolioHolding[] = portfolio.stocks.map((stock) => mapHolding(stock, totalInvested));
+  const holdings: PortfolioHolding[] = portfolio.stocks.map((stock) => mapHolding(stock, holdingWeightBase));
 
   return {
     id: String(portfolio.id),
@@ -151,6 +159,77 @@ function mapPortfolio(portfolio: BackendPortfolio): PortfolioItem {
   };
 }
 
+function toVndFromLatestClose(latestClose: number): number | null {
+  if (!Number.isFinite(latestClose) || latestClose <= 0) {
+    return null;
+  }
+
+  return Math.round(latestClose * 1_000);
+}
+
+async function buildLivePriceMap(portfolios: PortfolioItem[]): Promise<Map<string, number>> {
+  const symbols = Array.from(new Set(
+    portfolios.flatMap((portfolio) => portfolio.holdings.map((holding) => holding.symbol.trim().toUpperCase())),
+  )).filter((symbol) => symbol.length > 0);
+
+  if (symbols.length === 0) {
+    return new Map();
+  }
+
+  const latestPrices = await Promise.all(symbols.map(async (symbol) => {
+    try {
+      const ohlc = await getStockOHLC(symbol, 2);
+      const latestClose = ohlc[ohlc.length - 1]?.close;
+      const currentPrice = typeof latestClose === "number" ? toVndFromLatestClose(latestClose) : null;
+
+      return currentPrice && currentPrice > 0
+        ? [symbol, currentPrice] as const
+        : null;
+    } catch {
+      return null;
+    }
+  }));
+
+  return new Map(latestPrices.filter((entry): entry is readonly [string, number] => entry !== null));
+}
+
+function applyLivePricesToPortfolio(portfolio: PortfolioItem, priceMap: Map<string, number>): PortfolioItem {
+  const holdings = portfolio.holdings.map((holding) => {
+    const symbol = holding.symbol.trim().toUpperCase();
+    const livePrice = priceMap.get(symbol);
+
+    if (typeof livePrice !== "number" || !Number.isFinite(livePrice) || livePrice <= 0) {
+      return holding;
+    }
+
+    return {
+      ...holding,
+      currentPrice: livePrice,
+    };
+  });
+
+  const holdingsCostBasis = holdings.reduce((sum, holding) => sum + holding.avgPrice * holding.shares, 0);
+  const holdingsCurrentValue = holdings.reduce((sum, holding) => sum + holding.currentPrice * holding.shares, 0);
+  const remainingBudget = portfolio.totalInvested - holdingsCostBasis;
+  const currentValue = holdingsCurrentValue + remainingBudget;
+  const pnl = currentValue - portfolio.totalInvested;
+  const pnlPercent = portfolio.totalInvested > 0 ? (pnl / portfolio.totalInvested) * 100 : 0;
+
+  const weightedHoldings = holdings.map((holding) => {
+    const positionValue = holding.currentPrice * holding.shares;
+    const weight = holdingsCurrentValue > 0 ? Math.round((positionValue / holdingsCurrentValue) * 100) : 0;
+    return { ...holding, weight };
+  });
+
+  return {
+    ...portfolio,
+    currentValue,
+    pnl,
+    pnlPercent,
+    holdings: weightedHoldings,
+  };
+}
+
 export async function getPortfolioList(): Promise<PortfolioListData> {
   if (ENABLE_MOCK_API) {
     await delay(MOCK_API_DELAY_MS);
@@ -158,7 +237,12 @@ export async function getPortfolioList(): Promise<PortfolioListData> {
   }
 
   const raw = await apiAuthGet<BackendPortfolio[]>("/api/v1/portfolios");
-  return { portfolios: raw.map(mapPortfolio) };
+  const mapped = raw.map(mapPortfolio);
+  const livePriceMap = await buildLivePriceMap(mapped);
+
+  return {
+    portfolios: mapped.map((portfolio) => applyLivePricesToPortfolio(portfolio, livePriceMap)),
+  };
 }
 
 export async function createPortfolio(payload: CreatePortfolioPayload): Promise<PortfolioItem> {

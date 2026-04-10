@@ -15,6 +15,7 @@ export function useUpdatePortfolio() {
     mutationFn: ({ id, payload }: UpdatePortfolioArgs) => updatePortfolio(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Cập nhật danh mục thành công");
     },
     onError: (error) => {

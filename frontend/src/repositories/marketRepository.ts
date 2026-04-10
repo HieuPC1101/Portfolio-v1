@@ -1,7 +1,15 @@
 import { ENABLE_MOCK_API, MOCK_API_DELAY_MS } from "@/config/runtime";
 import { apiGet } from "@/lib/api";
+import { decodeHtmlEntities } from "@/lib/format";
 import { marketMock } from "@/mocks/market.mock";
 import type { MarketData, Sector, StockBasic } from "@/types/market";
+import type {
+  FinancialPeriod,
+  StockFinancialPeriod,
+  StockFinancialsData,
+  StockOverview,
+  StockRatios,
+} from "@/types/stockDetail";
 
 export interface StockSearchResult {
   symbol: string;
@@ -101,6 +109,67 @@ interface BackendSectorDetail {
   avg_growth_1w: number | null;
 }
 
+interface BackendStockOverviewResponse {
+  symbol: string;
+  company_name?: string | null;
+  exchange?: string | null;
+  sector?: string | null;
+  industry?: string | null;
+  market_cap?: number | null;
+  shares_outstanding?: number | null;
+  free_float?: number | null;
+  listing_date?: string | null;
+  headquarters?: string | null;
+  employee_count?: number | null;
+  business_summary?: string | null;
+  latest_highlights?: string[] | null;
+  as_of_date?: string | null;
+  source?: string | null;
+}
+
+interface BackendStockFinancialPeriod {
+  period_label: string;
+  year?: number | null;
+  quarter?: number | null;
+  revenue?: number | null;
+  gross_profit?: number | null;
+  operating_profit?: number | null;
+  net_income?: number | null;
+  total_assets?: number | null;
+  total_liabilities?: number | null;
+  equity?: number | null;
+  total_debt?: number | null;
+  cash_and_cash_equivalents?: number | null;
+  operating_cash_flow?: number | null;
+  investing_cash_flow?: number | null;
+  financing_cash_flow?: number | null;
+  free_cash_flow?: number | null;
+}
+
+interface BackendStockFinancialsResponse {
+  symbol: string;
+  period: string;
+  items?: BackendStockFinancialPeriod[];
+  as_of_date?: string | null;
+  source?: string | null;
+}
+
+interface BackendStockRatiosResponse {
+  symbol: string;
+  pe?: number | null;
+  pb?: number | null;
+  ev_ebitda?: number | null;
+  gross_margin?: number | null;
+  net_margin?: number | null;
+  roe?: number | null;
+  roa?: number | null;
+  debt_to_equity?: number | null;
+  as_of_date?: string | null;
+  reporting_period?: string | null;
+  quality_flags?: string[] | null;
+  source?: string | null;
+}
+
 const stockSearchMockData: StockSearchResult[] = [
   { symbol: "FPT", name: "FPT Corporation", exchange: "HOSE", sector: "Công nghệ", price: 132500, percent: 2.71 },
   { symbol: "MWG", name: "CTCP Đầu tư Thế Giới Di Động", exchange: "HOSE", sector: "Bán lẻ", price: 56200, percent: 3.31 },
@@ -136,6 +205,113 @@ const stockNewsMockData: Record<string, StockNewsItem[]> = {
       url: "https://vneconomy.vn/",
     },
   ],
+};
+
+const stockOverviewMockData: Record<string, StockOverview> = {
+  FPT: {
+    symbol: "FPT",
+    companyName: "CTCP FPT",
+    exchange: "HOSE",
+    sector: "Công nghệ",
+    industry: "Công nghệ thông tin",
+    marketCap: 185_000_000_000_000,
+    sharesOutstanding: 1_470_000_000,
+    freeFloat: 0.72,
+    listingDate: "2006-12-13",
+    headquarters: "Hà Nội, Việt Nam",
+    employeeCount: 50_000,
+    businessSummary: "Doanh nghiệp công nghệ và viễn thông hàng đầu với trọng tâm chuyển đổi số và xuất khẩu phần mềm.",
+    latestHighlights: [
+      "Doanh thu mảng công nghệ tăng trưởng ổn định trong các quý gần đây.",
+      "Biên lợi nhuận duy trì tích cực nhờ dịch vụ chuyển đổi số.",
+      "Dòng tiền hoạt động dương và ổn định.",
+    ],
+    asOfDate: "2026-03-31",
+    source: "mock",
+  },
+};
+
+const stockRatiosMockData: Record<string, StockRatios> = {
+  FPT: {
+    symbol: "FPT",
+    pe: 18.4,
+    pb: 4.1,
+    evEbitda: 11.7,
+    grossMargin: 0.41,
+    netMargin: 0.16,
+    roe: 0.24,
+    roa: 0.12,
+    debtToEquity: 0.45,
+    asOfDate: "2026-03-31",
+    reportingPeriod: "Q4/2025",
+    qualityFlags: [],
+    source: "mock",
+  },
+};
+
+const stockFinancialsMockData: Record<FinancialPeriod, Record<string, StockFinancialPeriod[]>> = {
+  quarterly: {
+    FPT: [
+      {
+        periodLabel: "Q4/2025",
+        year: 2025,
+        quarter: 4,
+        revenue: 18_000_000_000_000,
+        grossProfit: 7_300_000_000_000,
+        operatingProfit: 3_900_000_000_000,
+        netIncome: 2_900_000_000_000,
+        totalAssets: 70_000_000_000_000,
+        totalLiabilities: 34_000_000_000_000,
+        equity: 36_000_000_000_000,
+        totalDebt: 12_000_000_000_000,
+        cashAndCashEquivalents: 8_500_000_000_000,
+        operatingCashFlow: 3_100_000_000_000,
+        investingCashFlow: -1_200_000_000_000,
+        financingCashFlow: 500_000_000_000,
+        freeCashFlow: 1_900_000_000_000,
+      },
+      {
+        periodLabel: "Q3/2025",
+        year: 2025,
+        quarter: 3,
+        revenue: 17_100_000_000_000,
+        grossProfit: 6_900_000_000_000,
+        operatingProfit: 3_600_000_000_000,
+        netIncome: 2_700_000_000_000,
+        totalAssets: 68_500_000_000_000,
+        totalLiabilities: 33_500_000_000_000,
+        equity: 35_000_000_000_000,
+        totalDebt: 11_800_000_000_000,
+        cashAndCashEquivalents: 8_200_000_000_000,
+        operatingCashFlow: 2_800_000_000_000,
+        investingCashFlow: -1_100_000_000_000,
+        financingCashFlow: 450_000_000_000,
+        freeCashFlow: 1_700_000_000_000,
+      },
+    ],
+  },
+  yearly: {
+    FPT: [
+      {
+        periodLabel: "2025",
+        year: 2025,
+        quarter: null,
+        revenue: 68_000_000_000_000,
+        grossProfit: 27_800_000_000_000,
+        operatingProfit: 15_100_000_000_000,
+        netIncome: 11_600_000_000_000,
+        totalAssets: 70_000_000_000_000,
+        totalLiabilities: 34_000_000_000_000,
+        equity: 36_000_000_000_000,
+        totalDebt: 12_000_000_000_000,
+        cashAndCashEquivalents: 8_500_000_000_000,
+        operatingCashFlow: 12_300_000_000_000,
+        investingCashFlow: -4_200_000_000_000,
+        financingCashFlow: 1_800_000_000_000,
+        freeCashFlow: 8_100_000_000_000,
+      },
+    ],
+  },
 };
 
 async function delay(ms: number) {
@@ -203,12 +379,137 @@ function buildMockOHLCHistory(symbol: string, days: number): OHLCPoint[] {
 
 function mapNewsArticle(article: BackendNewsArticle): StockNewsItem {
   return {
-    title: article.title,
-    summary: article.summary ?? "",
-    source: article.source ?? "Không rõ",
+    title: decodeHtmlEntities(article.title),
+    summary: decodeHtmlEntities(article.summary ?? ""),
+    source: decodeHtmlEntities(article.source ?? "Không rõ"),
     publishedAt: article.published_at,
-    url: article.url,
+    url: article.url?.trim() || null,
   };
+}
+
+function getDefaultStockOverview(symbol: string): StockOverview {
+  return {
+    symbol,
+    companyName: null,
+    exchange: null,
+    sector: null,
+    industry: null,
+    marketCap: null,
+    sharesOutstanding: null,
+    freeFloat: null,
+    listingDate: null,
+    headquarters: null,
+    employeeCount: null,
+    businessSummary: null,
+    latestHighlights: [],
+    asOfDate: null,
+    source: null,
+  };
+}
+
+function getDefaultStockRatios(symbol: string): StockRatios {
+  return {
+    symbol,
+    pe: null,
+    pb: null,
+    evEbitda: null,
+    grossMargin: null,
+    netMargin: null,
+    roe: null,
+    roa: null,
+    debtToEquity: null,
+    asOfDate: null,
+    reportingPeriod: null,
+    qualityFlags: [],
+    source: null,
+  };
+}
+
+function mapStockOverview(response: BackendStockOverviewResponse): StockOverview {
+  return {
+    symbol: response.symbol,
+    companyName: response.company_name ?? null,
+    exchange: response.exchange ?? null,
+    sector: response.sector ?? null,
+    industry: response.industry ?? null,
+    marketCap: typeof response.market_cap === "number" ? response.market_cap : null,
+    sharesOutstanding: typeof response.shares_outstanding === "number" ? response.shares_outstanding : null,
+    freeFloat: typeof response.free_float === "number" ? response.free_float : null,
+    listingDate: response.listing_date ?? null,
+    headquarters: response.headquarters ?? null,
+    employeeCount: typeof response.employee_count === "number" ? response.employee_count : null,
+    businessSummary: response.business_summary ?? null,
+    latestHighlights: Array.isArray(response.latest_highlights) ? response.latest_highlights : [],
+    asOfDate: response.as_of_date ?? null,
+    source: response.source ?? null,
+  };
+}
+
+function mapStockFinancialPeriod(item: BackendStockFinancialPeriod): StockFinancialPeriod {
+  return {
+    periodLabel: item.period_label,
+    year: typeof item.year === "number" ? item.year : null,
+    quarter: typeof item.quarter === "number" ? item.quarter : null,
+    revenue: typeof item.revenue === "number" ? item.revenue : null,
+    grossProfit: typeof item.gross_profit === "number" ? item.gross_profit : null,
+    operatingProfit: typeof item.operating_profit === "number" ? item.operating_profit : null,
+    netIncome: typeof item.net_income === "number" ? item.net_income : null,
+    totalAssets: typeof item.total_assets === "number" ? item.total_assets : null,
+    totalLiabilities: typeof item.total_liabilities === "number" ? item.total_liabilities : null,
+    equity: typeof item.equity === "number" ? item.equity : null,
+    totalDebt: typeof item.total_debt === "number" ? item.total_debt : null,
+    cashAndCashEquivalents: typeof item.cash_and_cash_equivalents === "number" ? item.cash_and_cash_equivalents : null,
+    operatingCashFlow: typeof item.operating_cash_flow === "number" ? item.operating_cash_flow : null,
+    investingCashFlow: typeof item.investing_cash_flow === "number" ? item.investing_cash_flow : null,
+    financingCashFlow: typeof item.financing_cash_flow === "number" ? item.financing_cash_flow : null,
+    freeCashFlow: typeof item.free_cash_flow === "number" ? item.free_cash_flow : null,
+  };
+}
+
+function mapStockFinancials(response: BackendStockFinancialsResponse): StockFinancialsData {
+  const period: FinancialPeriod = response.period.toLowerCase().includes("year") ? "yearly" : "quarterly";
+  return {
+    symbol: response.symbol,
+    period,
+    items: (response.items ?? []).map(mapStockFinancialPeriod),
+    asOfDate: response.as_of_date ?? null,
+    source: response.source ?? null,
+  };
+}
+
+function mapStockRatios(response: BackendStockRatiosResponse): StockRatios {
+  return {
+    symbol: response.symbol,
+    pe: typeof response.pe === "number" ? response.pe : null,
+    pb: typeof response.pb === "number" ? response.pb : null,
+    evEbitda: typeof response.ev_ebitda === "number" ? response.ev_ebitda : null,
+    grossMargin: typeof response.gross_margin === "number" ? response.gross_margin : null,
+    netMargin: typeof response.net_margin === "number" ? response.net_margin : null,
+    roe: typeof response.roe === "number" ? response.roe : null,
+    roa: typeof response.roa === "number" ? response.roa : null,
+    debtToEquity: typeof response.debt_to_equity === "number" ? response.debt_to_equity : null,
+    asOfDate: response.as_of_date ?? null,
+    reportingPeriod: response.reporting_period ?? null,
+    qualityFlags: Array.isArray(response.quality_flags) ? response.quality_flags : [],
+    source: response.source ?? null,
+  };
+}
+
+export function getFinancialPeriodLabel(item: Pick<StockFinancialPeriod, "periodLabel" | "year" | "quarter">): string {
+  const fromField = (item.periodLabel ?? "").trim();
+  if (fromField) {
+    return fromField;
+  }
+
+  if (typeof item.year === "number" && typeof item.quarter === "number") {
+    return `Q${item.quarter}/${item.year}`;
+  }
+
+  if (typeof item.year === "number") {
+    return `${item.year}`;
+  }
+
+  return "--";
 }
 
 function toStockBasic(stock: BackendMover): StockBasic | null {
@@ -466,4 +767,65 @@ export async function getStockNews(symbol: string, limit = 5): Promise<StockNews
     `/api/v1/market/news/${encodeURIComponent(normalizedSymbol)}?limit=${limit}`,
   );
   return news.map(mapNewsArticle);
+}
+
+export async function getStockOverview(symbol: string): Promise<StockOverview> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (!normalizedSymbol) {
+    throw new Error("Missing stock symbol");
+  }
+
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
+    return stockOverviewMockData[normalizedSymbol] ?? getDefaultStockOverview(normalizedSymbol);
+  }
+
+  const overview = await apiGet<BackendStockOverviewResponse>(
+    `/api/v1/market/stock/${encodeURIComponent(normalizedSymbol)}/overview`,
+  );
+  return mapStockOverview(overview);
+}
+
+export async function getStockFinancials(
+  symbol: string,
+  period: FinancialPeriod = "quarterly",
+  limit = 8,
+): Promise<StockFinancialsData> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (!normalizedSymbol) {
+    throw new Error("Missing stock symbol");
+  }
+
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
+    return {
+      symbol: normalizedSymbol,
+      period,
+      items: (stockFinancialsMockData[period][normalizedSymbol] ?? []).slice(0, limit),
+      asOfDate: "2026-03-31",
+      source: "mock",
+    };
+  }
+
+  const financials = await apiGet<BackendStockFinancialsResponse>(
+    `/api/v1/market/stock/${encodeURIComponent(normalizedSymbol)}/financials?period=${period}&limit=${Math.max(1, limit)}`,
+  );
+  return mapStockFinancials(financials);
+}
+
+export async function getStockRatios(symbol: string): Promise<StockRatios> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (!normalizedSymbol) {
+    throw new Error("Missing stock symbol");
+  }
+
+  if (ENABLE_MOCK_API) {
+    await delay(MOCK_API_DELAY_MS);
+    return stockRatiosMockData[normalizedSymbol] ?? getDefaultStockRatios(normalizedSymbol);
+  }
+
+  const ratios = await apiGet<BackendStockRatiosResponse>(
+    `/api/v1/market/stock/${encodeURIComponent(normalizedSymbol)}/ratios`,
+  );
+  return mapStockRatios(ratios);
 }

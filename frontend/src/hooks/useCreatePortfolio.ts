@@ -10,6 +10,7 @@ export function useCreatePortfolio() {
     mutationFn: (payload: CreatePortfolioPayload) => createPortfolio(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio-list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Tạo danh mục thành công");
     },
     onError: (error) => {

@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getNewsFeed } from "@/repositories/newsRepository";
 
-export function useNewsQuery() {
+export function useNewsQuery(refreshNonce = 0) {
   return useQuery({
-    queryKey: ["news-feed"],
-    queryFn: getNewsFeed,
+    queryKey: ["news-feed", refreshNonce],
+    queryFn: () => getNewsFeed({ refresh: refreshNonce > 0 }),
+    placeholderData: keepPreviousData,
   });
 }

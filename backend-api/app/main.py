@@ -9,6 +9,7 @@ import logging
 
 from app.config import settings
 from app.database import init_db
+from app.services.notification_scheduler import NotificationSchedulerRunner
 
 # Configure logging
 logging.basicConfig(
@@ -16,6 +17,8 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+notification_scheduler_runner = NotificationSchedulerRunner()
 
 # Create FastAPI app
 app = FastAPI(
@@ -40,10 +43,13 @@ def _register_vnstock_api_key() -> None:
     """Đăng ký API key vnstock từ biến môi trường khi khởi động."""
     api_key = settings.vnstock_api_key
     if not api_key:
-        logger.warning("VNSTOCK_API_KEY không được đặt — chạy với giới hạn Guest (20 req/min).")
+        logger.warning(
+            "VNSTOCK_API_KEY không được đặt — chạy với giới hạn Guest (20 req/min)."
+        )
         return
     try:
         from vnstock.core.utils.auth import register_user
+
         success = register_user(api_key=api_key)
         if success:
             logger.info("Đã đăng ký VNSTOCK_API_KEY thành công (60 req/min).")
@@ -66,10 +72,13 @@ async def startup_event():
     if settings.debug:
         logger.info("Initializing database tables...")
 
+    notification_scheduler_runner.start()
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
+    await notification_scheduler_runner.stop()
     logger.info("Shutting down application...")
 
 
@@ -102,13 +111,14 @@ async def api_info():
 
 
 # Import and include routers
-from app.api import auth, market, portfolios, optimize, chat
+from app.api import auth, chat, market, notifications, optimize, portfolios
 
 app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(market.router, prefix=settings.api_v1_prefix)
 app.include_router(portfolios.router, prefix=settings.api_v1_prefix)
 app.include_router(optimize.router, prefix=settings.api_v1_prefix)
 app.include_router(chat.router, prefix=settings.api_v1_prefix)
+app.include_router(notifications.router, prefix=settings.api_v1_prefix)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,14 @@ describe("OptimizePage", () => {
     expect(screen.getByText("VCB")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Bắt đầu tối ưu hóa" }));
     expect(await screen.findByText("Phân bổ tỷ trọng")).toBeInTheDocument();
+    expect(await screen.findByText("Phân bổ chi tiết & đề xuất rebalance")).toBeInTheDocument();
+    expect(screen.getByText("Báo cáo trực quan")).toBeInTheDocument();
+    expect(screen.getByText("Phân bổ giá trị đề xuất")).toBeInTheDocument();
+    expect(screen.getByText("Tổng quan chỉ số tối ưu")).toBeInTheDocument();
+    expect(screen.getByText("Khối lượng cổ phiếu mục tiêu")).toBeInTheDocument();
+    expect(screen.getByText("So sánh tỷ trọng và giá trị theo mã")).toBeInTheDocument();
+    expect(screen.getByText("Khoảng cách lợi nhuận với benchmark")).toBeInTheDocument();
+    expect(screen.queryByText("Lưu theo dõi")).not.toBeInTheDocument();
   });
 
   it("chọn danh mục theo portfolioId trên URL", async () => {
@@ -38,5 +46,20 @@ describe("OptimizePage", () => {
     expect(await screen.findByText("Danh mục tăng trưởng")).toBeInTheDocument();
     expect(screen.getByText("TCB")).toBeInTheDocument();
     expect(screen.getByText("MBB")).toBeInTheDocument();
+  });
+
+  it("đề xuất số cổ phiếu theo ngân sách danh mục", async () => {
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/toi-uu"]}>
+        <OptimizePage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Danh mục chính")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Bắt đầu tối ưu hóa" }));
+
+    expect(await screen.findByText("Phân bổ chi tiết & đề xuất rebalance")).toBeInTheDocument();
+    expect((await screen.findAllByText("1194 cp")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/Hien tai/i)).toHaveLength(0);
   });
 });

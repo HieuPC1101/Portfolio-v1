@@ -16,7 +16,6 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
 const OptimizePage = lazy(() => import("./pages/OptimizePage"));
 const MarketPage = lazy(() => import("./pages/MarketPage"));
-const WatchlistPage = lazy(() => import("./pages/WatchlistPage"));
 const NewsPage = lazy(() => import("./pages/NewsPage"));
 const StockDetailPage = lazy(() => import("./pages/StockDetailPage"));
 
@@ -48,7 +47,6 @@ const App = () => (
             <Route path="/toi-uu" element={<LayoutPage><OptimizePage /></LayoutPage>} />
             <Route path="/thi-truong" element={<LayoutPage><MarketPage /></LayoutPage>} />
             <Route path="/co-phieu/:symbol" element={<LayoutPage><StockDetailPage /></LayoutPage>} />
-            <Route path="/watchlist" element={<LayoutPage><WatchlistPage /></LayoutPage>} />
             <Route path="/tin-tuc" element={<LayoutPage><NewsPage /></LayoutPage>} />
             <Route path="/ho-so" element={<LayoutPage><ProfilePage /></LayoutPage>} />
             <Route path="*" element={<NotFound />} />

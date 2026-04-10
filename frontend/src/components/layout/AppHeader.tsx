@@ -1,7 +1,5 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, LogOut, User } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { StockSearchBar } from "@/components/common/StockSearchBar";
+import { LogOut, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +11,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export function AppHeader() {
   const { user, logout } = useAuth();
@@ -32,16 +31,11 @@ export function AppHeader() {
 
   return (
     <header className="h-14 flex items-center justify-between border-b border-border px-4 bg-card">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center">
         <SidebarTrigger />
-        <div className="hidden md:block">
-          <StockSearchBar />
-        </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="text-muted-foreground">
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -127,6 +127,67 @@ def test_max_sharpe_uses_requested_risk_free_rate(monkeypatch):
     assert result["Tỷ lệ Sharpe"] == 1.4
 
 
+def test_markowitz_adjusts_infeasible_target_return_and_uses_raw_weights(monkeypatch):
+    calls = {"targets": []}
+
+    class FakeEfficientFrontier:
+        def __init__(self, mean_returns, cov_matrix):
+            pass
+
+        def _max_return(self):
+            return 0.1199
+
+        def efficient_return(self, target_return, market_neutral=False):
+            calls["targets"].append(target_return)
+            if target_return > 0.1199:
+                raise ValueError(
+                    "target_return must be lower than the maximum possible return"
+                )
+            return {"AAA": 0.7, "BBB": 0.3}
+
+        def clean_weights(self):
+            return {"AAA": 0.0, "BBB": 0.0}
+
+        def portfolio_performance(self, verbose=False):
+            return (0.12, 0.08, 1.25)
+
+    monkeypatch.setattr(
+        pm.expected_returns,
+        "mean_historical_return",
+        lambda data: pd.Series({"AAA": 0.13, "BBB": 0.11}),
+    )
+    monkeypatch.setattr(
+        pm.risk_models,
+        "sample_cov",
+        lambda data: pd.DataFrame(
+            [[0.04, 0.01], [0.01, 0.03]],
+            index=["AAA", "BBB"],
+            columns=["AAA", "BBB"],
+        ),
+    )
+    monkeypatch.setattr(pm, "EfficientFrontier", FakeEfficientFrontier)
+    monkeypatch.setattr(
+        pm,
+        "run_integer_programming",
+        lambda weights, latest_prices, total_portfolio_value: (
+            {"AAA": 5, "BBB": 6},
+            10_000,
+        ),
+    )
+
+    result = pm.markowitz_optimization(
+        build_price_data(),
+        1_000_000,
+        lambda tickers: {"AAA": 100_000, "BBB": 50_000},
+        target_return=0.12,
+    )
+
+    assert calls["targets"][0] == 0.12
+    assert calls["targets"][-1] < 0.12
+    assert result["Trọng số danh mục"] == {"AAA": 0.7, "BBB": 0.3}
+    assert result["target_return"] < 0.12
+
+
 def test_service_normalizes_tail_risk_and_actual_allocation_amounts(monkeypatch):
     service = OptimizationService()
     price_data = build_price_data()
@@ -163,6 +224,9 @@ def test_service_normalizes_tail_risk_and_actual_allocation_amounts(monkeypatch)
 
     assert result["expected_return"] == 0.15
     assert result["expected_volatility"] == 0.11
+    assert result["extra_data"]["expected_return"] == 0.15
+    assert result["extra_data"]["expected_volatility"] == 0.11
+    assert result["extra_data"]["sharpe_ratio"] == 1.2
     assert result["extra_data"]["cvar"] == 0.08
     assert result["extra_data"]["cdar"] == 0.12
     assert result["extra_data"]["latest_prices"] == {"AAA": 100_000.0, "BBB": 200_000.0}
@@ -170,3 +234,33 @@ def test_service_normalizes_tail_risk_and_actual_allocation_amounts(monkeypatch)
         "AAA": 300_000.0,
         "BBB": 400_000.0,
     }
+
+
+def test_run_integer_programming_falls_back_to_greedy_when_lp_fails(monkeypatch):
+    calls = {"lp": 0, "greedy": 0}
+
+    class FakeDiscreteAllocation:
+        def __init__(self, weights, latest_prices, total_portfolio_value):
+            calls["weights"] = weights
+            calls["latest_prices"] = latest_prices
+            calls["total_portfolio_value"] = total_portfolio_value
+
+        def lp_portfolio(self, reinvest=False, verbose=True, solver="ECOS_BB"):
+            calls["lp"] += 1
+            raise RuntimeError("ECOS_BB is not installed")
+
+        def greedy_portfolio(self, reinvest=False, verbose=True):
+            calls["greedy"] += 1
+            return ({"AAA": 6, "BBB": 4}, 20_000)
+
+    monkeypatch.setattr(pm, "DiscreteAllocation", FakeDiscreteAllocation)
+
+    latest_prices = pd.Series({"AAA": 100_000, "BBB": 50_000}, dtype=float)
+    allocation, leftover = pm.run_integer_programming(
+        {"AAA": 0.6, "BBB": 0.4}, latest_prices, 1_000_000
+    )
+
+    assert calls["lp"] == 1
+    assert calls["greedy"] == 1
+    assert allocation == {"AAA": 6, "BBB": 4}
+    assert leftover == 20_000

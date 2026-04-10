@@ -36,11 +36,29 @@ export const dashboardMock: DashboardData = {
     { symbol: "SHB", price: 12200, change: 360, percent: 3.04, liquidity: 198_000_000_000 },
     { symbol: "SSI", price: 32100, change: -350, percent: -1.08, liquidity: 176_000_000_000 },
   ],
-  chart: Array.from({ length: 30 }, (_, i) => ({
-    day: i + 1,
-    label: formatMockChartLabel(i),
-    value: Number((1250 + Math.sin(i * 0.3) * 20 + i * 1.2).toFixed(2)),
-  })),
+  chart: [
+    ...Array.from({ length: 30 }, (_, i) => ({
+      day: i + 1,
+      label: formatMockChartLabel(i),
+      value: Number((1250 + Math.sin(i * 0.3) * 20 + i * 1.2).toFixed(2)),
+      symbol: "VNINDEX",
+      volume: 420_000_000 + i * 7_500_000,
+    })),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      day: i + 1,
+      label: formatMockChartLabel(i),
+      value: Number((1310 + Math.sin(i * 0.33) * 17 + i * 1.05).toFixed(2)),
+      symbol: "VN30",
+      volume: 270_000_000 + i * 5_000_000,
+    })),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      day: i + 1,
+      label: formatMockChartLabel(i),
+      value: Number((1320 + Math.sin(i * 0.29) * 22 + i * 0.95).toFixed(2)),
+      symbol: "VN30F1M",
+      volume: 180_000_000 + i * 4_000_000,
+    })),
+  ],
   summary: {
     totalValue: 523_400_000,
     totalInvested: 450_000_000,

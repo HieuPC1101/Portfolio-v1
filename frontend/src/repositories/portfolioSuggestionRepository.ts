@@ -1,3 +1,5 @@
+import { ENABLE_MOCK_API } from "@/config/runtime";
+import { getStockOHLC, getStockOverview } from "@/repositories/marketRepository";
 import type {
   PortfolioSuggestionData,
   StockCatalogItem,
@@ -390,8 +392,88 @@ function buildPresets(catalog: StockCatalogItem[]): SystemPortfolioPreset[] {
   ];
 }
 
+const IS_TEST_ENV = import.meta.env.MODE === "test";
+
+function toPercentChange(current: number, reference: number, fallback: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(reference) || reference <= 0) {
+    return fallback;
+  }
+
+  return Number((((current - reference) / reference) * 100).toFixed(2));
+}
+
+function toCatalogMarketCap(value: number | null | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+
+  return Number((value / 1_000_000_000).toFixed(1));
+}
+
+function toWeeklyVolume(ohlc: Array<{ volume: number }>, fallback: number): number {
+  const latestFiveSessions = ohlc.slice(-5);
+  const sumVolume = latestFiveSessions.reduce(
+    (sum, point) => (Number.isFinite(point.volume) && point.volume > 0 ? sum + point.volume : sum),
+    0,
+  );
+
+  return sumVolume > 0 ? Math.round(sumVolume) : fallback;
+}
+
+async function enrichCatalogWithLiveQuotes(catalog: StockCatalogItem[]): Promise<StockCatalogItem[]> {
+  if (ENABLE_MOCK_API || IS_TEST_ENV) {
+    return catalog;
+  }
+
+  const enriched = await Promise.all(
+    catalog.map((stock) => enrichCatalogItemWithLiveQuote(stock)),
+  );
+
+  return enriched;
+}
+
+export async function enrichCatalogItemWithLiveQuote(
+  stock: StockCatalogItem,
+  getStockOHLCLive: typeof getStockOHLC = getStockOHLC,
+  getStockOverviewLive: typeof getStockOverview = getStockOverview,
+): Promise<StockCatalogItem> {
+  let ohlc: Awaited<ReturnType<typeof getStockOHLC>> = [];
+
+  try {
+    ohlc = await getStockOHLCLive(stock.symbol, 8);
+  } catch {
+    ohlc = [];
+  }
+
+  let marketCap = stock.marketCap;
+  try {
+    const overview = await getStockOverviewLive(stock.symbol);
+    marketCap = toCatalogMarketCap(overview.marketCap, stock.marketCap);
+  } catch {
+    marketCap = stock.marketCap;
+  }
+
+  const latestClose = ohlc[ohlc.length - 1]?.close;
+  const hasLivePrice = typeof latestClose === "number" && Number.isFinite(latestClose) && latestClose > 0;
+  const previousClose = ohlc[ohlc.length - 2]?.close ?? latestClose ?? 0;
+  const weeklyBaseline = ohlc[Math.max(0, ohlc.length - 6)]?.close ?? latestClose ?? 0;
+
+  return {
+    ...stock,
+    price: hasLivePrice ? Math.round(latestClose * 1000) : stock.price,
+    priceChangePercent: hasLivePrice
+      ? toPercentChange(latestClose, previousClose, stock.priceChangePercent)
+      : stock.priceChangePercent,
+    weeklyChangePercent: hasLivePrice
+      ? toPercentChange(latestClose, weeklyBaseline, stock.weeklyChangePercent)
+      : stock.weeklyChangePercent,
+    weeklyVolume: toWeeklyVolume(ohlc, stock.weeklyVolume),
+    marketCap,
+  };
+}
+
 export async function getPortfolioSuggestionData(): Promise<PortfolioSuggestionData> {
-  const catalog = clone(STOCK_CATALOG);
+  const catalog = await enrichCatalogWithLiveQuotes(clone(STOCK_CATALOG));
 
   return {
     catalog,

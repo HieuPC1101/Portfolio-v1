@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import {
   BarChart3,
   Check,
@@ -50,6 +50,7 @@ import { useAddStock } from "@/hooks/useAddStock";
 import { useCreatePortfolio } from "@/hooks/useCreatePortfolio";
 import { formatVND } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { createClientNotification } from "@/repositories/notificationRepository";
 import type { PortfolioHolding, PortfolioItem } from "@/types/portfolio";
 import type { StockCatalogItem, SystemPortfolioPreset } from "@/types/portfolioSuggestion";
 import {
@@ -63,6 +64,7 @@ import { DeletePortfolioDialog } from "@/components/portfolio/DeletePortfolioDia
 import { DeleteStockDialog } from "@/components/portfolio/DeleteStockDialog";
 import { EditPortfolioDialog } from "@/components/portfolio/EditPortfolioDialog";
 import { EditStockDialog } from "@/components/portfolio/EditStockDialog";
+import { showPortfolioMiniToast } from "@/components/notifications/PortfolioMiniToast";
 
 const COLORS = ["hsl(131, 45%, 40%)", "hsl(210, 70%, 55%)", "hsl(40, 65%, 65%)", "hsl(280, 50%, 63%)", "hsl(187, 45%, 55%)"];
 const CATALOG_PAGE_SIZE = 20;
@@ -110,6 +112,7 @@ function formatLocalePercent(value: number): string {
 
 export default function PortfolioPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data, isPending, isError } = usePortfolioQuery();
   const { data: suggestionData, isPending: isSuggestionPending } = usePortfolioSuggestions();
   const addStockMutation = useAddStock();
@@ -309,6 +312,24 @@ export default function PortfolioPage() {
     setVisibleCatalogCount(CATALOG_PAGE_SIZE);
   }, [catalogQuery, catalogExchange, catalogSector, catalogPriceMin, catalogPriceMax, catalogChangeMin, catalogChangeMax, catalogSort]);
 
+  function notifyPortfolioAction(
+    tone: "success" | "error" | "info",
+    title: string,
+    description: string,
+  ) {
+    createClientNotification({
+      type: "portfolio_alert",
+      title,
+      message: description,
+      payload: {
+        source: "portfolio-tabs",
+        tone,
+      },
+    });
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    showPortfolioMiniToast({ tone, title, description });
+  }
+
   async function handleQuickAddStock(stock: Pick<StockCatalogItem, "symbol" | "price">, silent = false) {
     if (!selected) {
       return;
@@ -316,20 +337,33 @@ export default function PortfolioPage() {
 
     if (selectedSymbols.has(stock.symbol.toUpperCase())) {
       if (!silent) {
-        toast.info(`Mã ${stock.symbol} đã có trong danh mục này`);
+        notifyPortfolioAction("info", "Mã đã tồn tại", `${stock.symbol} đã có trong danh mục ${selected.name}.`);
       }
       return;
     }
 
-    await addStockMutation.mutateAsync({
-      portfolioId: selected.id,
-      payload: {
-        symbol: stock.symbol,
-        shares: 100,
-        purchasePrice: stock.price,
-      },
-      silent,
-    });
+    try {
+      await addStockMutation.mutateAsync({
+        portfolioId: selected.id,
+        payload: {
+          symbol: stock.symbol,
+          shares: 100,
+          purchasePrice: stock.price,
+        },
+        silent: true,
+      });
+
+      if (!silent) {
+        notifyPortfolioAction("success", "Thêm cổ phiếu thành công", `Đã thêm ${stock.symbol} vào danh mục ${selected.name}.`);
+      }
+    } catch (error) {
+      if (!silent) {
+        const message = error instanceof Error ? error.message : "Có lỗi xảy ra, vui lòng thử lại";
+        notifyPortfolioAction("error", "Không thể thêm cổ phiếu", message);
+      }
+
+      throw error;
+    }
   }
 
   async function ensureQuickAddPortfolio() {
@@ -348,50 +382,64 @@ export default function PortfolioPage() {
   }
 
   async function handleQuickAddFromEmptyState(stock: Pick<StockCatalogItem, "symbol" | "price">) {
-    const target = await ensureQuickAddPortfolio();
+    try {
+      const target = await ensureQuickAddPortfolio();
 
-    await addStockMutation.mutateAsync({
-      portfolioId: target.id,
-      payload: {
-        symbol: stock.symbol,
-        shares: 100,
-        purchasePrice: stock.price,
-      },
-      silent: true,
-    });
+      await addStockMutation.mutateAsync({
+        portfolioId: target.id,
+        payload: {
+          symbol: stock.symbol,
+          shares: 100,
+          purchasePrice: stock.price,
+        },
+        silent: true,
+      });
 
-    toast.success(`Đã thêm ${stock.symbol} vào ${target.name}`);
+      notifyPortfolioAction("success", "Thêm cổ phiếu thành công", `Đã thêm ${stock.symbol} vào danh mục ${target.name}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Có lỗi xảy ra, vui lòng thử lại";
+      notifyPortfolioAction("error", "Không thể thêm cổ phiếu", message);
+    }
   }
 
   async function handleCopyPresetFromEmptyState(preset: SystemPortfolioPreset) {
-    const target = await ensureQuickAddPortfolio();
+    try {
+      const target = await ensureQuickAddPortfolio();
 
-    let successCount = 0;
-    let failedCount = 0;
+      let successCount = 0;
+      let failedCount = 0;
 
-    for (const stock of preset.stocks) {
-      try {
-        await addStockMutation.mutateAsync({
-          portfolioId: target.id,
-          payload: {
-            symbol: stock.symbol,
-            shares: 100,
-            purchasePrice: stock.price,
-          },
-          silent: true,
-        });
-        successCount += 1;
-      } catch {
-        failedCount += 1;
+      for (const stock of preset.stocks) {
+        try {
+          await addStockMutation.mutateAsync({
+            portfolioId: target.id,
+            payload: {
+              symbol: stock.symbol,
+              shares: 100,
+              purchasePrice: stock.price,
+            },
+            silent: true,
+          });
+          successCount += 1;
+        } catch {
+          failedCount += 1;
+        }
       }
-    }
 
-    if (successCount > 0) {
-      toast.success(`Đã thêm ${successCount} mã từ ${preset.name}`);
-    }
+      if (successCount > 0) {
+        notifyPortfolioAction(
+          "success",
+          "Sao chép danh mục thành công",
+          `Đã thêm ${successCount} mã từ ${preset.name} vào ${target.name}.`,
+        );
+      }
 
-    if (failedCount > 0) {
-      toast.error(`Không thể thêm ${failedCount} mã từ ${preset.name}`);
+      if (failedCount > 0) {
+        notifyPortfolioAction("error", "Sao chép danh mục chưa hoàn tất", `Không thể thêm ${failedCount} mã từ ${preset.name}.`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Có lỗi xảy ra, vui lòng thử lại";
+      notifyPortfolioAction("error", "Sao chép danh mục thất bại", message);
     }
   }
 
@@ -402,7 +450,7 @@ export default function PortfolioPage() {
 
     const pendingStocks = preset.stocks.filter((stock) => !selectedSymbols.has(stock.symbol.toUpperCase()));
     if (pendingStocks.length === 0) {
-      toast.info(`Danh mục ${preset.name} đã có đầy đủ các mã`);
+      notifyPortfolioAction("info", "Danh mục đã đủ mã", `${selected.name} đã có đầy đủ mã từ ${preset.name}.`);
       return;
     }
 
@@ -419,11 +467,11 @@ export default function PortfolioPage() {
     }
 
     if (successCount > 0) {
-      toast.success(`Đã thêm ${successCount} mã từ danh mục ${preset.name}`);
+      notifyPortfolioAction("success", "Sao chép danh mục thành công", `Đã thêm ${successCount} mã từ ${preset.name} vào ${selected.name}.`);
     }
 
     if (failedCount > 0) {
-      toast.error(`Không thể thêm ${failedCount} mã trong danh mục ${preset.name}`);
+      notifyPortfolioAction("error", "Sao chép danh mục chưa hoàn tất", `Không thể thêm ${failedCount} mã trong ${preset.name}.`);
     }
   }
 
@@ -708,10 +756,12 @@ export default function PortfolioPage() {
 
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span>Đầu tư: {formatVND(selected.totalInvested)}</span>
-              <span className={selected.pnl > 0 ? "text-stock-up" : "text-stock-down"}>
-                {selected.pnl > 0 ? "+" : ""}
-                {formatVND(selected.pnl)}
-              </span>
+              {selected.pnl !== 0 && (
+                <span className={selected.pnl > 0 ? "text-stock-up" : "text-stock-down"}>
+                  {selected.pnl > 0 ? "+" : ""}
+                  {formatVND(selected.pnl)}
+                </span>
+              )}
               <span>{selected.holdings.length} mã</span>
             </div>
 
@@ -757,7 +807,6 @@ export default function PortfolioPage() {
                 <thead>
                   <tr className="text-muted-foreground text-xs border-b border-border">
                     <th className="text-left py-2 font-medium">Mã</th>
-                    <th className="text-right py-2 font-medium">KL</th>
                     <th className="text-right py-2 font-medium">Giá mua</th>
                     <th className="text-right py-2 font-medium">Giá TT</th>
                     <th className="text-right py-2 font-medium">Lãi/Lỗ</th>
@@ -781,7 +830,6 @@ export default function PortfolioPage() {
                               {h.symbol}
                             </button>
                           </td>
-                          <td className="text-right tabular-nums">{h.shares.toLocaleString("vi-VN")}</td>
                           <td className="text-right tabular-nums">{h.avgPrice.toLocaleString("vi-VN")}</td>
                           <td className="text-right tabular-nums">{h.currentPrice.toLocaleString("vi-VN")}</td>
                           <td className={`text-right tabular-nums ${pnl > 0 ? "text-stock-up" : "text-stock-down"}`}>
@@ -822,7 +870,7 @@ export default function PortfolioPage() {
                     })
                   ) : (
                     <tr>
-                      <td className="py-3 text-sm text-muted-foreground" colSpan={7}>
+                      <td className="py-3 text-sm text-muted-foreground" colSpan={6}>
                         Chưa có cổ phiếu trong danh mục.
                       </td>
                     </tr>
