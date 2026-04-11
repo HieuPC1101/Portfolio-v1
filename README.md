@@ -4,6 +4,7 @@
 
 - **Frontend**: React + Vite + TypeScript
 - **Backend**: FastAPI + SQLAlchemy + PostgreSQL
+![pic](https://github.com/user-attachments/assets/4e385172-cd50-4228-9bdf-f16f6645aa90)
 
 ## Tính năng chính
 
