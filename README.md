@@ -1,4 +1,4 @@
-# Portfolio Project
+# Finstock
 
 Ứng dụng quản lý và tối ưu danh mục đầu tư chứng khoán Việt Nam, gồm:
 
@@ -18,7 +18,7 @@
 ## Cấu trúc dự án
 
 ```text
-Portfolio-Project/
+Finstock/
 |-- frontend/       # Ứng dụng web (React + Vite)
 `-- backend-api/    # REST API (FastAPI)
 ```
@@ -44,11 +44,11 @@ cd backend-api
 pip install -r requirements.txt
 ```
 
-Tạo file `.env` từ `.env.example` và cấu hình tối thiểu:
+Tạo file `.env` từ `.env.example` (hoặc `.env.sample`) và cấu hình tối thiểu:
 
 - `DATABASE_URL`
 - `SECRET_KEY`
-- `GEMINI_API_KEY` (nếu dùng chatbot)
+- `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` (nếu dùng chatbot)
 - `VNSTOCK_API_KEY` (khuyến nghị)
 
 Chạy migration và khởi động API:

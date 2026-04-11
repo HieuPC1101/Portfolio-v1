@@ -751,17 +751,10 @@ export default function PortfolioPage() {
                 <h3 className="font-semibold">{selected.name}</h3>
                 <p className="mt-1 text-2xl font-bold">{formatVND(selected.currentValue)}</p>
               </div>
-              <PercentBadge value={selected.pnlPercent} />
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span>Đầu tư: {formatVND(selected.totalInvested)}</span>
-              {selected.pnl !== 0 && (
-                <span className={selected.pnl > 0 ? "text-stock-up" : "text-stock-down"}>
-                  {selected.pnl > 0 ? "+" : ""}
-                  {formatVND(selected.pnl)}
-                </span>
-              )}
               <span>{selected.holdings.length} mã</span>
             </div>
 
@@ -809,16 +802,12 @@ export default function PortfolioPage() {
                     <th className="text-left py-2 font-medium">Mã</th>
                     <th className="text-right py-2 font-medium">Giá mua</th>
                     <th className="text-right py-2 font-medium">Giá TT</th>
-                    <th className="text-right py-2 font-medium">Lãi/Lỗ</th>
-                    <th className="text-right py-2 font-medium">%</th>
                     <th className="text-right py-2 font-medium">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selected.holdings.length > 0 ? (
                     selected.holdings.map((h) => {
-                      const pnl = (h.currentPrice - h.avgPrice) * h.shares;
-                      const pnlPct = ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100;
                       return (
                         <tr key={h.id} className="border-b border-border/50 hover:bg-accent/50">
                           <td className="py-2.5 font-semibold">
@@ -832,13 +821,6 @@ export default function PortfolioPage() {
                           </td>
                           <td className="text-right tabular-nums">{h.avgPrice.toLocaleString("vi-VN")}</td>
                           <td className="text-right tabular-nums">{h.currentPrice.toLocaleString("vi-VN")}</td>
-                          <td className={`text-right tabular-nums ${pnl > 0 ? "text-stock-up" : "text-stock-down"}`}>
-                            {pnl > 0 ? "+" : ""}
-                            {formatVND(pnl)}
-                          </td>
-                          <td className="text-right">
-                            <PercentBadge value={pnlPct} showIcon={false} />
-                          </td>
                           <td className="text-right">
                             <div className="inline-flex items-center gap-1">
                               <Button
@@ -870,7 +852,7 @@ export default function PortfolioPage() {
                     })
                   ) : (
                     <tr>
-                      <td className="py-3 text-sm text-muted-foreground" colSpan={6}>
+                      <td className="py-3 text-sm text-muted-foreground" colSpan={4}>
                         Chưa có cổ phiếu trong danh mục.
                       </td>
                     </tr>

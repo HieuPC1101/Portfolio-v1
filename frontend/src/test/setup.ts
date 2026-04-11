@@ -22,3 +22,7 @@ class ResizeObserver {
 }
 
 vi.stubGlobal("ResizeObserver", ResizeObserver);
+
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

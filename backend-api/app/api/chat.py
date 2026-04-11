@@ -104,6 +104,16 @@ def send_message(
         if not isinstance(assistant_timestamp, datetime):
             assistant_timestamp = datetime.utcnow()
 
+        raw_processing_duration = response.get("processing_duration_ms", 0)
+        try:
+            processing_duration_ms = int(raw_processing_duration)
+        except (TypeError, ValueError):
+            processing_duration_ms = 0
+
+        processing_steps = response.get("processing_steps")
+        if not isinstance(processing_steps, list):
+            processing_steps = []
+
         user_message = ChatMessage(
             conversation_id=conversation.id,
             role="user",
@@ -130,6 +140,14 @@ def send_message(
             "sources": assistant_message.sources or [],
             "suggested_actions": assistant_message.suggested_actions or [],
             "timestamp": assistant_message.timestamp,
+            "processing_started_at": response.get(
+                "processing_started_at", assistant_message.timestamp
+            ),
+            "processing_finished_at": response.get(
+                "processing_finished_at", assistant_message.timestamp
+            ),
+            "processing_duration_ms": processing_duration_ms,
+            "processing_steps": processing_steps,
         }
     except Exception as exc:
         db.rollback()

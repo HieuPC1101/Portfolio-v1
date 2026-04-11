@@ -1,4 +1,4 @@
-# Backend API - Portfolio Project
+# Backend API - Finstock
 
 Backend viết bằng **FastAPI** cho ứng dụng quản lý danh mục đầu tư chứng khoán Việt Nam.
 
@@ -9,7 +9,7 @@ Backend viết bằng **FastAPI** cho ứng dụng quản lý danh mục đầu 
 - Quản lý portfolio, watchlist và cổ phiếu trong danh mục
 - Tối ưu danh mục (Markowitz, Max Sharpe, Min Volatility, HRP, CVaR, CDaR)
 - Backtest kết quả tối ưu
-- Chatbot tư vấn đầu tư (Gemini)
+- Chatbot tư vấn đầu tư (OpenRouter)
 - Hệ thống thông báo và rule thông báo cho người dùng
 
 ## Công nghệ chính
@@ -45,11 +45,12 @@ cd backend-api
 pip install -r requirements.txt
 ```
 
-3) Tạo file `.env` từ `.env.example` và điền các biến quan trọng:
+3) Tạo file `.env` từ `.env.example` (hoặc `.env.sample`) và điền các biến quan trọng:
 
 - `DATABASE_URL`
 - `SECRET_KEY`
-- `GEMINI_API_KEY` (nếu dùng chatbot)
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL`
 - `VNSTOCK_API_KEY` (khuyến nghị để tăng giới hạn request)
 
 4) Update Database và chạy server:

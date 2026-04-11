@@ -40,8 +40,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    # Google Gemini API
-    gemini_api_key: str = ""
+    # OpenRouter API
+    openrouter_api_key: str = ""
+    openrouter_model: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_seconds: int = 30
 
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"

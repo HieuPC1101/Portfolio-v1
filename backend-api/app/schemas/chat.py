@@ -26,6 +26,10 @@ class ChatMessageResponse(BaseModel):
     sources: Optional[List[Dict[str, Any]]] = None
     suggested_actions: Optional[List[str]] = None
     timestamp: datetime
+    processing_started_at: datetime
+    processing_finished_at: datetime
+    processing_duration_ms: int
+    processing_steps: List[str] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

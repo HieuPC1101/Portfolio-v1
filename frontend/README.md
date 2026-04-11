@@ -1,4 +1,4 @@
-# Frontend - Portfolio Project
+# Frontend - Finstock
 
 Frontend được xây bằng **React + Vite + TypeScript**.
 
