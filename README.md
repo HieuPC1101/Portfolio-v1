@@ -1,114 +1,105 @@
-## Portfolio – Dashboard tối ưu hóa danh mục cổ phiếu
+# Finstock
 
-Ứng dụng Streamlit hỗ trợ nhà đầu tư chứng khoán Việt Nam: phân tích thị trường, lọc cổ phiếu, tối ưu hóa danh mục (Markowitz, Sharpe, HRP...), backtest và tích hợp trợ lý AI.
+Ứng dụng quản lý và tối ưu danh mục đầu tư chứng khoán Việt Nam, gồm:
 
----
+- **Frontend**: React + Vite + TypeScript
+- **Backend**: FastAPI + SQLAlchemy + PostgreSQL
+![pic](https://github.com/user-attachments/assets/4e385172-cd50-4228-9bdf-f16f6645aa90)
 
-## 1. Yêu cầu hệ thống
+## Tính năng chính
 
-- **Python 3.11+**
-- **Quản lý gói**: `pip` hoặc `uv` (khuyến nghị)
-- **Kết nối Internet**
+- Xác thực người dùng (JWT: access token + refresh token)
+- Theo dõi dữ liệu thị trường, chỉ số, thông tin cổ phiếu, tin tức
+- Quản lý portfolio, watchlist và cổ phiếu trong danh mục
+- Tối ưu danh mục (Markowitz, Max Sharpe, Min Volatility, HRP, CVaR, CDaR)
+- Backtest chiến lược đầu tư
+- Chatbot hỗ trợ phân tích đầu tư
+- Hệ thống thông báo và rule thông báo
 
----
+## Cấu trúc dự án
 
-## 2. Cài đặt
-
-### Clone dự án
-
-```bash
-git clone https://github.com/HieuPC1101/Portfolio-v1.git
-cd Portfolio-v1
+```text
+Finstock/
+|-- frontend/       # Ứng dụng web (React + Vite)
+`-- backend-api/    # REST API (FastAPI)
 ```
 
-### Cài đặt thư viện
+Chi tiết từng phần:
 
-**Cách 1: Dùng UV (Nhanh, khuyến nghị)**
+- Frontend: `frontend/README.md`
+- Backend: `backend-api/README.MD`
+
+## Yêu cầu môi trường
+
+- Node.js 18+
+- Python 3.10+
+- PostgreSQL
+- (Tùy chọn) Redis cho tác vụ nền
+
+## Chạy nhanh local
+
+## 1) Chạy backend
 
 ```bash
-pip install uv
-uv sync
-```
-
-**Cách 2: Dùng Pip**
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate | Unix: source .venv/bin/activate
+cd backend-api
 pip install -r requirements.txt
 ```
 
-### Cấu hình API (cho Chatbot)
+Tạo file `.env` từ `.env.example` (hoặc `.env.sample`) và cấu hình tối thiểu:
 
-Tạo file `utils/secret_config.py`:
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` (nếu dùng chatbot)
+- `VNSTOCK_API_KEY` (khuyến nghị)
 
-```python
-GEMINI_API_KEY = "your-api-key"
-```
-
----
-
-## 3. Chạy ứng dụng
-
-**Với UV:**
+Chạy migration và khởi động API:
 
 ```bash
-uv run streamlit run main.py
+alembic upgrade head
+python run.py
 ```
 
-**Với Pip:**
+Backend mặc định chạy tại: `http://localhost:8000`
+
+## 2) Chạy frontend
 
 ```bash
-streamlit run main.py
+cd frontend
+npm install
+npm run dev
 ```
 
-Truy cập: `http://localhost:8501`
+Frontend mặc định chạy tại: `http://localhost:8080`
 
----
+Frontend proxy `/api/*` sang backend. Nếu backend chạy host/port khác, tạo `frontend/.env.local`:
 
-## 4. Các tính năng chính
+```bash
+VITE_API_PROXY_TARGET=http://127.0.0.1:8001
+```
 
-1. **Tổng quan Thị trường**: Theo dõi VNINDEX, VN30, HNX, dòng tiền khối ngoại và hiệu suất ngành.
-2. **Tự chọn mã cổ phiếu**: Lọc theo ngành/sàn, chọn mã thủ công và chạy tối ưu hóa.
-3. **Đề xuất tự động**: Hệ thống gợi ý mã cổ phiếu dựa trên tiêu chí lợi nhuận hoặc rủi ro.
-4. **Tổng hợp & So sánh**: So sánh hiệu quả giữa các mô hình (Sharpe, Risk, Return) và backtest.
-5. **Tin tức**: Cập nhật tin tức tài chính mới nhất.
-6. **Trợ lý AI**: Chatbot tư vấn phân tích thị trường sử dụng Gemini API.
+## Tài liệu API
 
----
+- Swagger UI: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+- API info: `http://localhost:8000/api/v1/info`
 
-## 5. Các mô hình tối ưu hóa
+## Chạy test
 
-Ứng dụng hỗ trợ các mô hình từ thư viện `PyPortfolioOpt`:
+Backend:
 
-- **Markowitz (Mean-Variance)**: Cân bằng lợi nhuận/rủi ro.
-- **Max Sharpe**: Tối đa hóa tỷ lệ Sharpe.
-- **Min Volatility**: Tối thiểu hóa rủi ro (độ lệch chuẩn).
-- **Min CVaR / CDaR**: Tối thiểu hóa rủi ro đuôi và drawdown.
-- **HRP**: Phân bổ rủi ro theo cấu trúc phân cấp (Hierarchical Risk Parity).
+```bash
+cd backend-api
+pytest
+```
 
----
+Frontend:
 
-## 6. Công nghệ sử dụng
+```bash
+cd frontend
+npm run test
+```
 
-- **Core**: Python 3.11, Streamlit
-- **Data & Math**: Pandas, Numpy, Scipy, Statsmodels
-- **Finance**: Vnstock, Vnai, PyPortfolioOpt
-- **Viz**: Plotly
-- **AI**: Google Generative AI (Gemini)
+## Ghi chú
 
----
-
-## 7. Luồng hoạt động
-
-**Quy trình cơ bản:**
-
-1. **Khởi tạo**: Load data và session state.
-2. **Input**: Người dùng chọn cổ phiếu (Thủ công hoặc Tự động).
-3. **Xử lý**: Lấy dữ liệu giá -> Tính toán Metrics -> Chạy Video mô hình tối ưu hóa.
-4. **Kết quả**: Hiển thị bảng phân bổ vốn, biểu đồ hiệu quả và kết quả Backtest.
-
-**Kiến trúc:**
-`Dashboard (UI)` -> `Data Layer` (vnstock) -> `Model Layer` (PyPortfolioOpt) -> `Result`
-
----
+- Không lưu token/API key nhạy cảm vào source code.
+- Dự án đang tách rõ frontend/backend để dễ scale và triển khai độc lập.
