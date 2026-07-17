@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import { AreaLineChart } from "@/components/common/AreaLineChart";
@@ -18,7 +17,14 @@ import {
   getStockOverview,
   getStockRatios,
 } from "@/repositories/marketRepository";
- 
+
+function isFiniteNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function hasMeaningfulText(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
 function formatDateTime(value: string | null): string {
   const parsed = parseBackendDate(value);
@@ -30,28 +36,28 @@ function formatDateTime(value: string | null): string {
 }
 
 function formatRatio(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!isFiniteNumber(value)) {
     return "--";
   }
   return value.toFixed(2);
 }
 
 function formatAsPercent(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!isFiniteNumber(value)) {
     return "--";
   }
   return `${(value * 100).toFixed(2)}%`;
 }
 
 function formatCurrencyValue(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!isFiniteNumber(value)) {
     return "--";
   }
   return formatVND(value);
 }
 
 function formatInteger(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!isFiniteNumber(value)) {
     return "--";
   }
   return new Intl.NumberFormat("vi-VN").format(value);
@@ -60,7 +66,6 @@ function formatInteger(value: number | null | undefined): string {
 export default function StockDetailPage() {
   const { symbol: routeSymbol } = useParams();
   const symbol = (routeSymbol ?? "").trim().toUpperCase();
-  const [analysisTab, setAnalysisTab] = useState<"overview" | "ratios">("overview");
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["stock-detail", symbol],
@@ -114,6 +119,46 @@ export default function StockDetailPage() {
 
   const latestDate = data.history30d[data.history30d.length - 1]?.date;
   const primaryName = overview?.companyName ?? data.name;
+  const overviewSector = overview?.industry ?? overview?.sector ?? data.sector;
+  const businessSummary = hasMeaningfulText(overview?.businessSummary) ? overview.businessSummary : null;
+  const displayMarketCap = overview?.marketCap
+    ?? (isFiniteNumber(overview?.sharesOutstanding) ? overview.sharesOutstanding * data.price * 1_000 : null);
+
+  const ratioItems = [
+    { label: "P/E", value: ratios?.pe, formatter: formatRatio },
+    { label: "P/B", value: ratios?.pb, formatter: formatRatio },
+    { label: "EV/EBITDA", value: ratios?.evEbitda, formatter: formatRatio },
+    { label: "Gross Margin", value: ratios?.grossMargin, formatter: formatAsPercent },
+    { label: "Net Margin", value: ratios?.netMargin, formatter: formatAsPercent },
+    { label: "ROE", value: ratios?.roe, formatter: formatAsPercent },
+    { label: "ROA", value: ratios?.roa, formatter: formatAsPercent },
+    { label: "D/E", value: ratios?.debtToEquity, formatter: formatRatio },
+  ].filter((item) => isFiniteNumber(item.value));
+
+  const sectorCard = hasMeaningfulText(overviewSector)
+    ? { label: "Ngành", value: overviewSector }
+    : null;
+  const exchangeCard = hasMeaningfulText(overview?.exchange)
+    ? { label: "Sàn", value: overview.exchange }
+    : null;
+  const marketCapCard = !isOverviewPending && isFiniteNumber(displayMarketCap)
+    ? { label: "Vốn hóa", value: formatCurrencyValue(displayMarketCap) }
+    : null;
+  const sharesOutstandingCard = isFiniteNumber(overview?.sharesOutstanding)
+    ? { label: "Số cổ phiếu lưu hành", value: formatInteger(overview.sharesOutstanding) }
+    : null;
+
+  const summaryFactCards = [sectorCard, exchangeCard, marketCapCard, sharesOutstandingCard]
+    .filter((item): item is { label: string; value: string } => item !== null);
+
+  const showBusinessSection =
+    summaryFactCards.length > 0
+    || businessSummary !== null
+    || ratioItems.length > 0
+    || isOverviewPending
+    || isRatiosPending
+    || isOverviewError
+    || isRatiosError;
 
   return (
     <div className="space-y-6">
@@ -122,77 +167,132 @@ export default function StockDetailPage() {
         <p className="mt-1 text-sm text-muted-foreground">{primaryName ?? "Chưa có thông tin doanh nghiệp"}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {showBusinessSection ? (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Giá gần nhất</CardTitle>
+            <CardTitle className="text-base">Phân tích doanh nghiệp</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold tabular-nums">{formatStockPrice(data.price)}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{data.price.toLocaleString("vi-VN")} nghìn đ/cp</p>
-            <p className="mt-1 text-xs text-muted-foreground">{latestDate ? `Cập nhật: ${formatISODate(latestDate)}` : "Chưa có dữ liệu lịch sử"}</p>
-          </CardContent>
-        </Card>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <Card className="h-full border-border bg-background/40 shadow-none xl:min-h-[196px]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Giá gần nhất</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-2xl font-bold tabular-nums">{formatStockPrice(data.price)}</p>
+                  <PercentBadge value={data.percent} />
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <p>{data.price.toLocaleString("vi-VN")} nghìn đ/cp</p>
+                    <p>{latestDate ? `Cập nhật: ${formatISODate(latestDate)}` : "Chưa có dữ liệu lịch sử"}</p>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Biến động ngày</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PercentBadge value={data.percent} />
-          </CardContent>
-        </Card>
+              <div className="grid gap-4">
+                {sectorCard ? (
+                  <Card className="border-border bg-background/40 shadow-none xl:min-h-[90px]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">{sectorCard.label}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-lg font-semibold">{sectorCard.value}</p>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Sàn giao dịch</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold">{data.exchange ?? "N/A"}</p>
-          </CardContent>
-        </Card>
+                {exchangeCard ? (
+                  <Card className="border-border bg-background/40 shadow-none xl:min-h-[90px]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">{exchangeCard.label}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-lg font-semibold">{exchangeCard.value}</p>
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
 
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Ngành</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold">{data.sector ?? "N/A"}</p>
-          </CardContent>
-        </Card>
+              <div className="grid gap-4">
+                {marketCapCard ? (
+                  <Card className="border-border bg-background/40 shadow-none xl:min-h-[90px]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">{marketCapCard.label}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-lg font-semibold">{marketCapCard.value}</p>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Vốn hóa</CardTitle>
-          </CardHeader>
-          <CardContent>
+                {sharesOutstandingCard ? (
+                  <Card className="border-border bg-background/40 shadow-none xl:min-h-[90px]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">{sharesOutstandingCard.label}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-lg font-semibold">{sharesOutstandingCard.value}</p>
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
+            </div>
+
             {isOverviewPending ? (
-              <Skeleton className="h-6 w-32" />
-            ) : (
-              <p className="text-lg font-semibold">{formatCurrencyValue(overview?.marketCap)}</p>
-            )}
-          </CardContent>
-        </Card>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-20 w-full" />
+                ))}
+              </div>
+            ) : null}
 
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Định giá nhanh</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
+            {!isOverviewPending && businessSummary ? (
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">Mô tả doanh nghiệp</p>
+                <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed">{businessSummary}</p>
+              </div>
+            ) : null}
+
+            {!isRatiosPending && ratioItems.length > 0 ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {ratioItems.map((item) => (
+                    <div key={item.label} className="rounded-md border border-border p-3">
+                      <p className="text-xs text-muted-foreground">{item.label}</p>
+                      <p className="mt-1 text-lg font-semibold">{item.formatter(item.value)}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <div>Ngày cập nhật: {ratios?.asOfDate ?? "--"}</div>
+                  <div>Kỳ báo cáo: {ratios?.reportingPeriod ?? "--"}</div>
+                </div>
+              </div>
+            ) : null}
+
             {isRatiosPending ? (
-              <>
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-20" />
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium">P/E: {formatRatio(ratios?.pe)}</p>
-                <p className="text-sm font-medium">P/B: {formatRatio(ratios?.pb)}</p>
-              </>
-            )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : null}
+
+            {isOverviewError && summaryFactCards.length === 0 && businessSummary === null ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Không thể tải tổng quan doanh nghiệp.</p>
+                <Button variant="outline" size="sm" onClick={() => void refetchOverview()}>Thử lại</Button>
+              </div>
+            ) : null}
+
+            {isRatiosError && ratioItems.length === 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Không thể tải chỉ số phân tích.</p>
+                <Button variant="outline" size="sm" onClick={() => void refetchRatios()}>Thử lại</Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
-      </div>
+      ) : null}
 
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
@@ -218,105 +318,6 @@ export default function StockDetailPage() {
                 <AreaLineChart data={data.history30d} />
               ) : (
                 <div className="text-sm text-muted-foreground">Chưa có dữ liệu biểu đồ.</div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Phân tích doanh nghiệp</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs
-            value={analysisTab}
-            onValueChange={(value) => setAnalysisTab(value as "overview" | "ratios")}
-            className="space-y-3"
-          >
-            <TabsList className="bg-accent">
-              <TabsTrigger value="overview">Tổng quan công ty</TabsTrigger>
-              <TabsTrigger value="ratios">Chỉ số phân tích</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="overview" className="mt-0 space-y-4">
-              {isOverviewPending ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-5/6" />
-                  <Skeleton className="h-4 w-3/4" />
-                </div>
-              ) : isOverviewError ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Không thể tải tổng quan doanh nghiệp.</p>
-                  <Button variant="outline" size="sm" onClick={() => void refetchOverview()}>Thử lại</Button>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="rounded-md border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Sàn</p>
-                      <p className="mt-1 text-sm font-medium">{overview?.exchange ?? "--"}</p>
-                    </div>
-                    <div className="rounded-md border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Ngành</p>
-                      <p className="mt-1 text-sm font-medium">{overview?.industry ?? overview?.sector ?? "--"}</p>
-                    </div>
-                    <div className="rounded-md border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Số cổ phiếu lưu hành</p>
-                      <p className="mt-1 text-sm font-medium">{formatInteger(overview?.sharesOutstanding)}</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Mô tả doanh nghiệp</p>
-                    <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed">
-                      {overview?.businessSummary ?? "Chưa có mô tả doanh nghiệp."}
-                    </p>
-                  </div>
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="ratios" className="mt-0 space-y-3">
-              {isRatiosPending ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <Skeleton key={index} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : isRatiosError ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Không thể tải chỉ số phân tích.</p>
-                  <Button variant="outline" size="sm" onClick={() => void refetchRatios()}>Thử lại</Button>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {[
-                      { label: "P/E", value: ratios?.pe, formatter: formatRatio },
-                      { label: "P/B", value: ratios?.pb, formatter: formatRatio },
-                      { label: "EV/EBITDA", value: ratios?.evEbitda, formatter: formatRatio },
-                      { label: "Gross Margin", value: ratios?.grossMargin, formatter: formatAsPercent },
-                      { label: "Net Margin", value: ratios?.netMargin, formatter: formatAsPercent },
-                      { label: "ROE", value: ratios?.roe, formatter: formatAsPercent },
-                      { label: "ROA", value: ratios?.roa, formatter: formatAsPercent },
-                      { label: "D/E", value: ratios?.debtToEquity, formatter: formatRatio },
-                    ]
-                      .filter((item) => typeof item.value === "number" && Number.isFinite(item.value))
-                      .map((item) => (
-                        <div key={item.label} className="rounded-md border border-border p-3">
-                          <p className="text-xs text-muted-foreground">{item.label}</p>
-                          <p className="mt-1 text-lg font-semibold">{item.formatter(item.value)}</p>
-                        </div>
-                      ))}
-                  </div>
-
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <div>Ngày cập nhật: {ratios?.asOfDate ?? "--"}</div>
-                    <div>Kỳ báo cáo: {ratios?.reportingPeriod ?? "--"}</div>
-                  </div>
-                </>
               )}
             </TabsContent>
           </Tabs>

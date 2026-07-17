@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -40,8 +41,13 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> Any:
     - **password**: Password (min 8 characters)
     - **full_name**: Optional full name
     """
+    normalized_username = user_data.username.strip()
+    normalized_email = user_data.email.strip()
+
     # Check if username already exists
-    existing_user = db.query(User).filter(User.username == user_data.username).first()
+    existing_user = (
+        db.query(User).filter(func.trim(User.username) == normalized_username).first()
+    )
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -49,7 +55,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> Any:
         )
 
     # Check if email already exists
-    existing_email = db.query(User).filter(User.email == user_data.email).first()
+    existing_email = db.query(User).filter(func.trim(User.email) == normalized_email).first()
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
@@ -58,8 +64,8 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> Any:
     # Create new user
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        username=user_data.username,
-        email=user_data.email,
+        username=normalized_username,
+        email=normalized_email,
         hashed_password=hashed_password,
         full_name=user_data.full_name,
     )
@@ -80,8 +86,10 @@ def login(
 
     Returns access token and refresh token for authenticated user.
     """
+    normalized_username = form_data.username.strip()
+
     # Find user by username
-    user = db.query(User).filter(User.username == form_data.username).first()
+    user = db.query(User).filter(func.trim(User.username) == normalized_username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -246,23 +254,36 @@ def update_me(
     """
     Update current user's profile (full_name, email, username).
     """
-    if update_data.username and update_data.username != current_user.username:
-        existing = db.query(User).filter(User.username == update_data.username).first()
+    normalized_username = (
+        update_data.username.strip() if update_data.username is not None else None
+    )
+    normalized_email = update_data.email.strip() if update_data.email is not None else None
+
+    if normalized_username and normalized_username != current_user.username:
+        existing = (
+            db.query(User).filter(func.trim(User.username) == normalized_username).first()
+        )
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username already taken",
             )
 
-    if update_data.email and update_data.email != current_user.email:
-        existing = db.query(User).filter(User.email == update_data.email).first()
+    if normalized_email and normalized_email != current_user.email:
+        existing = db.query(User).filter(func.trim(User.email) == normalized_email).first()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered",
             )
 
-    for field, value in update_data.model_dump(exclude_unset=True).items():
+    updates = update_data.model_dump(exclude_unset=True)
+    if "username" in updates and updates["username"] is not None:
+        updates["username"] = normalized_username
+    if "email" in updates and updates["email"] is not None:
+        updates["email"] = normalized_email
+
+    for field, value in updates.items():
         setattr(current_user, field, value)
 
     db.commit()

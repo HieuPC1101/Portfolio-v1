@@ -26,6 +26,38 @@ vi.mock("@/repositories/marketRepository", () => ({
     ],
   }),
   getStockNews: vi.fn().mockResolvedValue([]),
+  getStockOverview: vi.fn().mockResolvedValue({
+    symbol: "FPT",
+    companyName: "CTCP FPT",
+    exchange: "HOSE",
+    sector: "Công nghệ và thông tin",
+    industry: "Công nghệ và thông tin",
+    marketCap: null,
+    sharesOutstanding: 1704000000,
+    freeFloat: null,
+    listingDate: null,
+    headquarters: null,
+    employeeCount: null,
+    businessSummary: null,
+    latestHighlights: [],
+    asOfDate: null,
+    source: "vnstock",
+  }),
+  getStockRatios: vi.fn().mockResolvedValue({
+    symbol: "FPT",
+    pe: null,
+    pb: null,
+    evEbitda: null,
+    grossMargin: null,
+    netMargin: null,
+    roe: null,
+    roa: null,
+    debtToEquity: null,
+    asOfDate: null,
+    reportingPeriod: null,
+    qualityFlags: [],
+    source: "vnstock",
+  }),
 }));
 
 function renderPage() {
@@ -48,5 +80,19 @@ describe("StockDetailPage", () => {
 
     expect(await screen.findByText("74.000 ₫")).toBeInTheDocument();
     expect(await screen.findByRole("tab", { name: "Biểu đồ nến" })).toBeInTheDocument();
+  });
+
+  it("ẩn mô tả và card chỉ số khi không có dữ liệu, nhưng vẫn hiển thị vốn hóa tính từ số cổ phiếu", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Phân tích doanh nghiệp")).toBeInTheDocument();
+    expect(screen.getByText("Giá gần nhất")).toBeInTheDocument();
+    expect(screen.getByText("Ngành")).toBeInTheDocument();
+    expect(screen.getByText("Sàn")).toBeInTheDocument();
+    expect(screen.getByText("Số cổ phiếu lưu hành")).toBeInTheDocument();
+    expect(await screen.findByText("Vốn hóa")).toBeInTheDocument();
+    expect(screen.getByText("126.096 tỷ đ")).toBeInTheDocument();
+    expect(screen.queryByText("Mô tả doanh nghiệp")).not.toBeInTheDocument();
+    expect(screen.queryByText("P/E")).not.toBeInTheDocument();
   });
 });

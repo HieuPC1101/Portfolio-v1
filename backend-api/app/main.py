@@ -2,9 +2,11 @@
 FastAPI main application.
 """
 
+from contextlib import redirect_stderr, redirect_stdout
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import io
 import logging
 
 from app.config import settings
@@ -50,7 +52,9 @@ def _register_vnstock_api_key() -> None:
     try:
         from vnstock.core.utils.auth import register_user
 
-        success = register_user(api_key=api_key)
+        # vnstock prints unicode status markers that can break on cp1252 consoles.
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            success = register_user(api_key=api_key)
         if success:
             logger.info("Đã đăng ký VNSTOCK_API_KEY thành công (60 req/min).")
         else:
