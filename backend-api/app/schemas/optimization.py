@@ -40,7 +40,7 @@ class OptimizationResponse(BaseModel):
     extra_data: Optional[Dict[str, Any]] = None
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class OptimizationRunResponse(OptimizationResponse):

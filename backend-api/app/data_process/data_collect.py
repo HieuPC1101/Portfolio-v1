@@ -1,5 +1,7 @@
 import sys
 import os
+from contextlib import redirect_stderr, redirect_stdout
+import io
 
 # Ensure 'backend-api/' is on path so app.* imports work when run as script
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -30,7 +32,8 @@ def register_api_key() -> None:
         return
     try:
         from vnstock.core.utils.auth import register_user
-        success = register_user(api_key=api_key)
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            success = register_user(api_key=api_key)
         if success:
             logging.info("Đã đăng ký API key vnstock thành công (60 req/min).")
         else:

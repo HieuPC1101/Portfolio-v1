@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+from builtins import print as builtin_print
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from vnstock import Vnstock
+
+
+def _safe_print(*args, **kwargs) -> None:
+    try:
+        builtin_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        safe_args = [
+            str(arg).encode("ascii", "backslashreplace").decode("ascii")
+            for arg in args
+        ]
+        builtin_print(*safe_args, **kwargs)
+
+
+print = _safe_print
 
 
 def _normalize_label(value: Any) -> str:
@@ -97,8 +112,21 @@ def fetch_fundamental_data(symbol: str) -> Optional[Dict[str, Any]]:
     """Fetch normalized fundamental data for a single ticker."""
     try:
         symbol_upper = symbol.upper()
-        stock = Vnstock().stock(symbol=symbol_upper, source="VCI")
-        financial_ratio = stock.finance.ratio(period="year", lang="en")
+        financial_ratio = None
+
+        for source in ("KBS", "VCI"):
+            try:
+                stock = Vnstock().stock(symbol=symbol_upper, source=source)
+                try:
+                    financial_ratio = stock.finance.ratio(period="year", lang="en")
+                except TypeError:
+                    financial_ratio = stock.finance.ratio(period="year")
+
+                if financial_ratio is not None and not financial_ratio.empty:
+                    break
+            except Exception:
+                financial_ratio = None
+
         if financial_ratio is None or financial_ratio.empty:
             print(f"Không có dữ liệu phân tích cơ bản cho {symbol}")
             return None

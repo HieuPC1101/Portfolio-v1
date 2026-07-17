@@ -119,6 +119,18 @@ class MarketService:
             return None
         return parsed
 
+    @staticmethod
+    def _to_optional_share_count(value: Any) -> Optional[float]:
+        parsed = MarketService._to_optional_float(value)
+        if parsed is None or parsed <= 0:
+            return None
+
+        # Some providers return listed volume in millions of shares.
+        if parsed < 10_000_000:
+            return parsed * 1_000_000
+
+        return parsed
+
     @classmethod
     def _pick_value(cls, source: Dict[str, Any], keys: Sequence[str]) -> Any:
         for key in keys:
@@ -150,43 +162,48 @@ class MarketService:
         try:
             from vnstock import Vnstock
 
-            stock = Vnstock().stock(symbol=symbol, source="VCI")
-            company = getattr(stock, "company", None)
-            if company is None:
-                return {}
-
-            for method_name in ("profile", "overview"):
-                method = getattr(company, method_name, None)
-                if not callable(method):
-                    continue
-
+            for source in ("KBS", "VCI"):
                 try:
-                    payload = method()
-                except SystemExit as exc:
-                    logger.warning(
-                        "vnstock rate limit while fetching profile for %s: %s",
-                        symbol,
-                        exc,
-                    )
-                    continue
+                    stock = Vnstock().stock(symbol=symbol, source=source)
                 except Exception:
                     continue
 
-                if payload is None:
+                company = getattr(stock, "company", None)
+                if company is None:
                     continue
 
-                if isinstance(payload, pd.DataFrame):
-                    if payload.empty:
+                for method_name in ("profile", "overview"):
+                    method = getattr(company, method_name, None)
+                    if not callable(method):
                         continue
-                    row = payload.iloc[0].to_dict()
-                elif isinstance(payload, dict):
-                    row = payload
-                else:
-                    continue
 
-                normalized = {str(key): value for key, value in row.items()}
-                if normalized:
-                    return normalized
+                    try:
+                        payload = method()
+                    except SystemExit as exc:
+                        logger.warning(
+                            "vnstock rate limit while fetching profile for %s: %s",
+                            symbol,
+                            exc,
+                        )
+                        continue
+                    except Exception:
+                        continue
+
+                    if payload is None:
+                        continue
+
+                    if isinstance(payload, pd.DataFrame):
+                        if payload.empty:
+                            continue
+                        row = payload.iloc[0].to_dict()
+                    elif isinstance(payload, dict):
+                        row = payload
+                    else:
+                        continue
+
+                    normalized = {str(key): value for key, value in row.items()}
+                    if normalized:
+                        return normalized
 
             return {}
         except SystemExit as exc:
@@ -426,23 +443,33 @@ class MarketService:
         return payload
 
     def _fetch_financial_ratio_frame(self, symbol: str, period: str) -> pd.DataFrame:
-        try:
-            from vnstock import Vnstock
+        from vnstock import Vnstock
 
-            period_value = "quarter" if period == "quarterly" else "year"
-            stock = Vnstock().stock(symbol=symbol, source="VCI")
-            frame = stock.finance.ratio(period=period_value, lang="vi")
-            if frame is None or frame.empty:
-                return pd.DataFrame()
-            return frame.copy()
-        except SystemExit as exc:
-            logger.warning(
-                "vnstock rate limit while fetching ratio frame for %s (%s): %s",
-                symbol,
-                period,
-                exc,
-            )
-            return pd.DataFrame()
+        period_value = "quarter" if period == "quarterly" else "year"
+
+        for source in ("KBS", "VCI"):
+            try:
+                stock = Vnstock().stock(symbol=symbol, source=source)
+                try:
+                    frame = stock.finance.ratio(period=period_value, lang="vi")
+                except TypeError:
+                    frame = stock.finance.ratio(period=period_value)
+
+                if frame is None or frame.empty:
+                    continue
+                return frame.copy()
+            except SystemExit as exc:
+                logger.warning(
+                    "vnstock rate limit while fetching ratio frame for %s (%s): %s",
+                    symbol,
+                    period,
+                    exc,
+                )
+                continue
+            except Exception:
+                continue
+
+        return pd.DataFrame()
 
     def get_stock_overview(self, symbol: str) -> Dict[str, Any]:
         symbol_upper = symbol.upper()
@@ -521,6 +548,7 @@ class MarketService:
                 self._pick_value_flexible(
                     profile_data,
                     [
+                        "business_model",
                         "company_profile",
                         "companyProfile",
                         "business_summary",
@@ -533,15 +561,18 @@ class MarketService:
                 )
             )
 
-        if self._is_missing_value(business_summary):
-            summary_parts: List[str] = []
-            if company_name:
-                summary_parts.append(str(company_name))
-            if exchange:
-                summary_parts.append(f"niem yet tren {exchange}")
-            if sector:
-                summary_parts.append(f"thuoc nganh {sector}")
-            business_summary = ". ".join(summary_parts) if summary_parts else None
+        if shares_outstanding is None:
+            shares_outstanding = self._to_optional_share_count(
+                self._pick_value_flexible(
+                    profile_data,
+                    [
+                        "shares_outstanding",
+                        "outstanding_share",
+                        "listed_volume",
+                        "listed_shares",
+                    ],
+                )
+            )
 
         return {
             "symbol": symbol_upper,

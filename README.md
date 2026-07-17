@@ -98,8 +98,3 @@ Frontend:
 cd frontend
 npm run test
 ```
-
-## Ghi chú
-
-- Không lưu token/API key nhạy cảm vào source code.
-- Dự án đang tách rõ frontend/backend để dễ scale và triển khai độc lập.

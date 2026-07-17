@@ -1,5 +1,6 @@
 """Data fetching utilities for CSV files and market APIs."""
 
+from builtins import print as builtin_print
 import warnings
 
 # Suppress specific warning about pkg_resources
@@ -18,6 +19,22 @@ from vnstock import Vnstock
 
 # Thiết lập múi giờ Việt Nam
 VN_TZ = pytz.timezone("Asia/Ho_Chi_Minh")
+
+
+def _safe_print(*args, **kwargs) -> None:
+    try:
+        builtin_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        safe_args = [
+            str(arg).encode("ascii", "backslashreplace").decode("ascii")
+            for arg in args
+        ]
+        builtin_print(*safe_args, **kwargs)
+
+
+# vnstock/data helpers still emit console output in runtime paths. On Windows,
+# Vietnamese text can crash request handling when stdout uses a legacy code page.
+print = _safe_print
 
 
 def fetch_data_from_csv(file_path: str) -> pd.DataFrame:
@@ -62,8 +79,8 @@ def _fetch_single_stock_cached(
     Fetch a single ticker history and cache the response.
     Returns a DataFrame with DatetimeIndex.
     """
-    # Try VCI first, fallback to MSN if needed
-    sources = ["VCI", "MSN"]
+    # vnstock 3.5.x currently breaks frequently on VCI init for stock endpoints.
+    sources = ["KBS", "VCI"]
     last_error = None
 
     for source in sources:
@@ -190,7 +207,7 @@ def _fetch_latest_price_single(
     ticker: str, start_date: str, end_date: str
 ) -> Tuple[Optional[float], Optional[str]]:
     """Return latest close price (in VND) for ticker."""
-    sources = ["VCI", "MSN"]
+    sources = ["KBS", "VCI"]
 
     for source in sources:
         try:
@@ -248,7 +265,7 @@ def get_latest_prices(tickers: List[str]) -> Dict[str, float]:
 
 def fetch_ohlc_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch OHLCV data for a single ticker."""
-    sources = ["VCI", "MSN"]
+    sources = ["KBS", "VCI"]
 
     for source in sources:
         try:
@@ -297,7 +314,8 @@ def get_index_history(
     if s_date > e_date:
         s_date = e_date - datetime.timedelta(days=30)
 
-    sources = [source, "VCI", "MSN"] if source else ["VCI", "MSN"]
+    fallback_sources = [candidate for candidate in [source, "KBS", "VCI"] if candidate]
+    sources = list(dict.fromkeys(fallback_sources))
 
     for src in sources:
         try:
